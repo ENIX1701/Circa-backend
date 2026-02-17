@@ -1,8 +1,10 @@
-use sea_orm::eneity::prelude::*;
+use derive_more::Display;
+use sea_orm::entity::prelude::*;
+use sea_orm::sea_query::StringLen;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Display, Clone, PartialEq, EnumIter, DeriveActiveEnum)]
-#[sea_orm(rs_type = "String", db_type = "String(None)")]
+#[sea_orm(rs_type = "String", db_type = "String(StringLen::None)")]
 pub enum Role {
     #[sea_orm(string_value = "event_director")]
     EventDirector,
@@ -13,7 +15,7 @@ pub enum Role {
 }
 
 #[derive(Debug, Serialize, Deserialize, Display, Clone, PartialEq, EnumIter, DeriveActiveEnum)]
-#[sea_orm(rs_type = "String", db_type = "String(None)")]
+#[sea_orm(rs_type = "String", db_type = "String(StringLen::None)")]
 pub enum Status {
     #[sea_orm(string_value = "active")]
     Active,
