@@ -85,7 +85,7 @@ impl From<entity::Model> for User {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct CreateUserRequest {
     pub name: String,
     pub surname: String,
@@ -94,7 +94,7 @@ pub struct CreateUserRequest {
     pub role: UserRole,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct UpdateUserRequest {
     pub name: Option<String>,
     pub surname: Option<String>,

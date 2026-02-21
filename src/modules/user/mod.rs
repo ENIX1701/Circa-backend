@@ -1,4 +1,4 @@
-mod entity;
+pub mod entity;
 pub mod models;
 pub mod repository;
 pub mod routes;

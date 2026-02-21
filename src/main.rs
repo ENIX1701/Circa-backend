@@ -11,7 +11,7 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to connect to the database :c");
 
-    let user_service = web::Data::new(UserService::new(UserRepository::new(db_conn.clone())));
+    let user_service = web::Data::new(UserService::new(UserRepository::new(db_conn)));
 
     println!("Server starting at 0.0.0.0:8080");
 
