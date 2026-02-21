@@ -1,1 +1,3 @@
-- [ ] TODO: create DTOs and conversion from entities to models and vice versa
+- [x] TODO: create DTOs and conversion from entities to models and vice versa
+- [ ] auth qwq
+- [ ] fe integration
