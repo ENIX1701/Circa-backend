@@ -1,7 +1,8 @@
 use super::entity::{ActiveModel, Entity as UserEntity};
-use super::models::{CreateUserRequest, User};
+use super::models::{CreateUserRequest, UpdateUserRequest, User};
 use crate::error::AppError;
 use sea_orm::*;
+use uuid;
 
 pub struct UserRepository {
     db: DatabaseConnection,
@@ -31,7 +32,7 @@ impl UserRepository {
     }
 
     pub async fn create(&self, dto: CreateUserRequest) -> Result<User, AppError> {
-        let id = uuid::Uuid::new_v7().to_string();
+        let id = uuid::Uuid::now_v7().to_string();
 
         let new_user = ActiveModel {
             id: Set(id),
