@@ -2,6 +2,7 @@ use actix_web::{App, HttpServer, web};
 use circa_backend::config::Config;
 use circa_backend::db;
 use circa_backend::user;
+use circa_backend::user::{repository::UserRepository, service::UserService};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -10,11 +11,13 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to connect to the database :c");
 
+    let user_service = web::Data::new(UserService::new(UserRepository::new(db_conn.clone())));
+
     println!("Server starting at 0.0.0.0:8080");
 
     HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::new(db_conn.clone()))
+            .app_data(user_service.clone())
             .configure(user::routes::config)
     })
     .bind(("0.0.0.0", 8080))?

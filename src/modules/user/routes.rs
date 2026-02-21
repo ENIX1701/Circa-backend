@@ -1,7 +1,6 @@
 use crate::error::AppError;
-use crate::modules::user::models::{
-    CreateUserRequest, UpdateUserRequest, User, UserRole, UserStatus,
-};
+use crate::modules::user::models::{CreateUserRequest, UpdateUserRequest};
+use crate::modules::user::service::UserService;
 use actix_web::{HttpResponse, web};
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -15,84 +14,42 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     );
 }
 
-// get all
-async fn get_users() -> Result<HttpResponse, AppError> {
-    // TODO: fetch from db
-    // mock for now
-    let users = vec![
-        User {
-            id: "1".to_string(),
-            name: "John".to_string(),
-            surname: "Smith".to_string(),
-            role: UserRole::EventDirector,
-            email: "john@event.com".to_string(),
-            phone: "+1 234 567 890".to_string(),
-            status: UserStatus::Active,
-        },
-        User {
-            id: "2".to_string(),
-            name: "Michael".to_string(),
-            surname: "Brown".to_string(),
-            role: UserRole::BoothOwner,
-            email: "michael@event.com".to_string(),
-            phone: "+22 987 654 321".to_string(),
-            status: UserStatus::Active,
-        },
-        User {
-            id: "3".to_string(),
-            name: "Teressa".to_string(),
-            surname: "Birkenstock".to_string(),
-            role: UserRole::Clown,
-            email: "clown@event.com".to_string(),
-            phone: "+123 33 44 112".to_string(),
-            status: UserStatus::Inactive,
-        },
-    ];
-
+async fn get_users(service: web::Data<UserService>) -> Result<HttpResponse, AppError> {
+    let users = service.get_users().await?;
     Ok(HttpResponse::Ok().json(users))
 }
 
-// post new
-async fn create_user(body: web::Json<CreateUserRequest>) -> Result<HttpResponse, AppError> {
-    if body.email.is_empty() {
-        return Err(AppError::BadRequest("Email is required".to_string()));
-    }
-
-    // TODO: save to db
-    let user = User {
-        id: "1".to_string(),
-        name: body.name.clone(),
-        surname: body.surname.clone(),
-        role: body.role.clone(),
-        email: body.email.clone(),
-        phone: body.phone.clone(),
-        status: UserStatus::Active,
-    };
-
+async fn create_user(
+    service: web::Data<UserService>,
+    body: web::Json<CreateUserRequest>,
+) -> Result<HttpResponse, AppError> {
+    let user = service.create_user(body.into_inner()).await?;
     Ok(HttpResponse::Ok().json(user))
 }
 
-// get {id}
-async fn get_user(path: web::Path<String>) -> Result<HttpResponse, AppError> {
-    let user_id = path.into_inner();
-    // TODO: fetch user from db
-
-    Err(AppError::NotFound(
-        "User not found! (We don't have a db QwQ)".to_string(),
-    ))
+async fn get_user(
+    service: web::Data<UserService>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, AppError> {
+    let user = service.get_user(&path.into_inner()).await?;
+    Ok(HttpResponse::Ok().json(user))
 }
 
-// patch
 async fn update_user(
+    service: web::Data<UserService>,
     path: web::Path<String>,
     body: web::Json<UpdateUserRequest>,
 ) -> Result<HttpResponse, AppError> {
-    let user_id = path.into_inner();
-    Ok(HttpResponse::Ok().body("updated UwU (not really)"))
+    let user = service
+        .update_user(&path.into_inner(), body.into_inner())
+        .await?;
+    Ok(HttpResponse::Ok().json(user))
 }
 
-// delete
-async fn delete_user(path: web::Path<String>) -> Result<HttpResponse, AppError> {
-    let user_id = path.into_inner();
-    Ok(HttpResponse::Ok().body("deleted QwQ (not really)"))
+async fn delete_user(
+    service: web::Data<UserService>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, AppError> {
+    service.delete_user(&path.into_inner()).await?;
+    Ok(HttpResponse::Ok().body("User deleted successfully"))
 }
