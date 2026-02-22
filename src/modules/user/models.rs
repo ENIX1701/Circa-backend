@@ -15,6 +15,17 @@ pub enum UserRole {
     Volunteer,
 }
 
+impl UserRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            UserRole::Admin => "admin",
+            UserRole::Organizer => "organizer",
+            UserRole::Staff => "staff",
+            UserRole::Volunteer => "volunteer",
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Display, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum UserStatus {

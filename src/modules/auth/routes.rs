@@ -1,6 +1,7 @@
 use crate::{
     auth::{middleware::jwt_validator, models::Claims, service::generate_jwt},
     modules::auth::models::LoginRequest,
+    user::service::UserService,
 };
 use actix_web::{HttpMessage, HttpRequest, HttpResponse, Responder, web};
 use actix_web_httpauth::middleware::HttpAuthentication;
@@ -17,12 +18,20 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 }
 
 // TODO: fix? x3
-async fn login(body: web::Json<LoginRequest>, jwt_secret: web::Data<String>) -> impl Responder {
-    // match generate_jwt(&body.email, &jwt_secret).await {
-    //     Ok(token_response) => HttpResponse::Ok().json(token_response),
-    //     Err(_) => HttpResponse::InternalServerError().body("Failed to generate JWT"),
-    // }
-    HttpResponse::Ok()
+async fn login(
+    body: web::Json<LoginRequest>,
+    jwt_secret: web::Data<String>,
+    user_service: web::Data<UserService>,
+) -> impl Responder {
+    let user = match user_service.get_user_by_email(&body.email).await {
+        Ok(user) => user,
+        Err(_) => return HttpResponse::Unauthorized().body("User not found"),
+    };
+
+    match generate_jwt(&body.email, user.role.as_str(), &jwt_secret).await {
+        Ok(token_response) => HttpResponse::Ok().json(token_response),
+        Err(_) => HttpResponse::InternalServerError().body("Failed to generate JWT"),
+    }
 }
 
 async fn get_current_user(req: HttpRequest) -> impl Responder {

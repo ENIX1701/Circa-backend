@@ -31,6 +31,16 @@ impl UserRepository {
         Ok(model.map(|m| m.into()))
     }
 
+    pub async fn find_by_email(&self, email: &str) -> Result<Option<User>, AppError> {
+        let model = UserEntity::find()
+            .filter(super::entity::Column::Email.eq(email))
+            .one(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)?;
+
+        Ok(model.map(|m| m.into()))
+    }
+
     pub async fn create(&self, dto: CreateUserRequest) -> Result<User, AppError> {
         let id = uuid::Uuid::now_v7().to_string();
 

@@ -22,6 +22,11 @@ impl UserService {
         user.ok_or_else(|| AppError::NotFound("User not found".to_string()))
     }
 
+    pub async fn get_user_by_email(&self, email: &str) -> Result<User, AppError> {
+        let user = self.repository.find_by_email(email).await?;
+        user.ok_or_else(|| AppError::NotFound("User not found".to_string()))
+    }
+
     pub async fn create_user(&self, req: CreateUserRequest) -> Result<User, AppError> {
         if req.email.is_empty() {
             return Err(AppError::BadRequest("Email is required".to_string()));
