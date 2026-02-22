@@ -6,12 +6,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, Display, Clone, PartialEq, EnumIter, DeriveActiveEnum)]
 #[sea_orm(rs_type = "String", db_type = "String(StringLen::None)")]
 pub enum Role {
-    #[sea_orm(string_value = "event_director")]
-    EventDirector,
-    #[sea_orm(string_value = "booth_owner")]
-    BoothOwner,
-    #[sea_orm(string_value = "clown")]
-    Clown,
+    #[sea_orm(string_value = "admin")]
+    Admin,
+    #[sea_orm(string_value = "organizer")]
+    Organizer,
+    #[sea_orm(string_value = "staff")]
+    Staff,
+    #[sea_orm(string_value = "volunteer")]
+    Volunteer,
 }
 
 #[derive(Debug, Serialize, Deserialize, Display, Clone, PartialEq, EnumIter, DeriveActiveEnum)]

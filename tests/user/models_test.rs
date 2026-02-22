@@ -3,13 +3,15 @@ use circa_backend::modules::user::models::{User, UserRole, UserStatus};
 
 #[test]
 fn test_role_conversion() {
-    assert_eq!(Role::from(UserRole::EventDirector), Role::EventDirector);
-    assert_eq!(Role::from(UserRole::BoothOwner), Role::BoothOwner);
-    assert_eq!(Role::from(UserRole::Clown), Role::Clown);
+    assert_eq!(Role::from(UserRole::Admin), Role::Admin);
+    assert_eq!(Role::from(UserRole::Organizer), Role::Organizer);
+    assert_eq!(Role::from(UserRole::Staff), Role::Staff);
+    assert_eq!(Role::from(UserRole::Volunteer), Role::Volunteer);
 
-    assert_eq!(UserRole::from(Role::EventDirector), UserRole::EventDirector);
-    assert_eq!(UserRole::from(Role::BoothOwner), UserRole::BoothOwner);
-    assert_eq!(UserRole::from(Role::Clown), UserRole::Clown);
+    assert_eq!(UserRole::from(Role::Admin), UserRole::Admin);
+    assert_eq!(UserRole::from(Role::Organizer), UserRole::Organizer);
+    assert_eq!(UserRole::from(Role::Staff), UserRole::Staff);
+    assert_eq!(UserRole::from(Role::Volunteer), UserRole::Volunteer);
 }
 
 #[test]
@@ -29,7 +31,7 @@ fn test_model_to_user_conversion() {
         surname: "Strider".to_string(),
         email: "dave@example.com".to_string(),
         phone: "123456789".to_string(),
-        role: Role::Clown,
+        role: Role::Volunteer,
         status: Status::Active,
     };
 
@@ -40,6 +42,6 @@ fn test_model_to_user_conversion() {
     assert_eq!(user.surname, "Strider");
     assert_eq!(user.email, "dave@example.com");
     assert_eq!(user.phone, "123456789");
-    assert_eq!(user.role, UserRole::Clown);
+    assert_eq!(user.role, UserRole::Volunteer);
     assert_eq!(user.status, UserStatus::Active);
 }

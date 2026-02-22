@@ -36,7 +36,7 @@ impl UserService {
         req: UpdateUserRequest,
         claims: &Claims,
     ) -> Result<User, AppError> {
-        if claims.sub != id {
+        if claims.sub != id && claims.role != "admin" && claims.role != "organizer" {
             return Err(AppError::Forbidden);
         }
 
@@ -44,8 +44,7 @@ impl UserService {
     }
 
     pub async fn delete_user(&self, id: &str, claims: &Claims) -> Result<(), AppError> {
-        // TODO: add || role == admin or smth like that
-        if claims.sub != id {
+        if claims.sub != id && claims.role != "admin" {
             return Err(AppError::Forbidden);
         }
 

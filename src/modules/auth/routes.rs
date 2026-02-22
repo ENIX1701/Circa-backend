@@ -16,13 +16,13 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     );
 }
 
+// TODO: fix? x3
 async fn login(body: web::Json<LoginRequest>, jwt_secret: web::Data<String>) -> impl Responder {
-    let user =
-
-    match generate_jwt(&body.email, &jwt_secret).await {
-        Ok(token_response) => HttpResponse::Ok().json(token_response),
-        Err(_) => HttpResponse::InternalServerError().body("Failed to generate JWT"),
-    }
+    // match generate_jwt(&body.email, &jwt_secret).await {
+    //     Ok(token_response) => HttpResponse::Ok().json(token_response),
+    //     Err(_) => HttpResponse::InternalServerError().body("Failed to generate JWT"),
+    // }
+    HttpResponse::Ok()
 }
 
 async fn get_current_user(req: HttpRequest) -> impl Responder {

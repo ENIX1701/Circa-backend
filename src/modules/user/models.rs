@@ -5,12 +5,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, Display, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum UserRole {
-    #[display("Event director")]
-    EventDirector,
-    #[display("Booth owner")]
-    BoothOwner,
-    #[display("Clown")]
-    Clown,
+    #[display("Admin")]
+    Admin,
+    #[display("Organizer")]
+    Organizer,
+    #[display("Staff")]
+    Staff,
+    #[display("Volunteer")]
+    Volunteer,
 }
 
 #[derive(Debug, Serialize, Deserialize, Display, Clone, PartialEq)]
@@ -25,9 +27,10 @@ pub enum UserStatus {
 impl From<UserRole> for entity::Role {
     fn from(item: UserRole) -> Self {
         match item {
-            UserRole::EventDirector => entity::Role::EventDirector,
-            UserRole::BoothOwner => entity::Role::BoothOwner,
-            UserRole::Clown => entity::Role::Clown,
+            UserRole::Admin => entity::Role::Admin,
+            UserRole::Organizer => entity::Role::Organizer,
+            UserRole::Staff => entity::Role::Staff,
+            UserRole::Volunteer => entity::Role::Volunteer,
         }
     }
 }
@@ -44,9 +47,10 @@ impl From<UserStatus> for entity::Status {
 impl From<entity::Role> for UserRole {
     fn from(item: entity::Role) -> Self {
         match item {
-            entity::Role::EventDirector => UserRole::EventDirector,
-            entity::Role::BoothOwner => UserRole::BoothOwner,
-            entity::Role::Clown => UserRole::Clown,
+            entity::Role::Admin => UserRole::Admin,
+            entity::Role::Organizer => UserRole::Organizer,
+            entity::Role::Staff => UserRole::Staff,
+            entity::Role::Volunteer => UserRole::Volunteer,
         }
     }
 }
