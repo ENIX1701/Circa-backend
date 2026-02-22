@@ -60,9 +60,16 @@ async fn update_user(
 }
 
 async fn delete_user(
+    req: HttpRequest,
     service: web::Data<UserService>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, AppError> {
-    service.delete_user(&path.into_inner()).await?;
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or_else(|| AppError::Unauthorized)?;
+
+    service.delete_user(&path.into_inner(), &claims).await?;
     Ok(HttpResponse::Ok().body("User deleted successfully"))
 }
