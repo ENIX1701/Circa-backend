@@ -10,6 +10,8 @@ pub enum AppError {
     BadRequest(String),
     #[display("Not found: {}", _0)]
     NotFound(String),
+    Unauthorized,
+    Forbidden,
 }
 
 impl ResponseError for AppError {
@@ -23,6 +25,8 @@ impl ResponseError for AppError {
             AppError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
             AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
             AppError::NotFound(_) => StatusCode::NOT_FOUND,
+            AppError::Unauthorized => StatusCode::UNAUTHORIZED,
+            AppError::Forbidden => StatusCode::FORBIDDEN,
         }
     }
 }

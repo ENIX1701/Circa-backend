@@ -124,7 +124,7 @@ async fn test_update_user_success() {
         status: None,
     };
 
-    let result = service.update_user("1", req).await;
+    let result = service.update_user("1", req, claims).await;
     assert!(result.is_ok());
     assert_eq!(result.unwrap().name, "Jane");
 }

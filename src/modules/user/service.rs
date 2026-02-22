@@ -1,5 +1,6 @@
 use super::models::User;
 use super::repository::UserRepository;
+use crate::auth::models::Claims;
 use crate::error::AppError;
 use crate::user::models::{CreateUserRequest, UpdateUserRequest};
 
@@ -7,11 +8,6 @@ pub struct UserService {
     repository: UserRepository,
 }
 
-// TODO: add authorization
-// currently anyone can delete and update anyone else's account
-// not hard to see why this is bad
-// consider JWT or some Spring Security Rust alternative
-// spring my beloved,,
 impl UserService {
     pub fn new(repository: UserRepository) -> Self {
         Self { repository }
@@ -34,11 +30,25 @@ impl UserService {
         self.repository.create(req).await
     }
 
-    pub async fn update_user(&self, id: &str, req: UpdateUserRequest) -> Result<User, AppError> {
+    pub async fn update_user(
+        &self,
+        id: &str,
+        req: UpdateUserRequest,
+        claims: &Claims,
+    ) -> Result<User, AppError> {
+        if claims.sub != id {
+            return Err(AppError::Forbidden);
+        }
+
         self.repository.update(id, req).await
     }
 
-    pub async fn delete_user(&self, id: &str) -> Result<(), AppError> {
+    pub async fn delete_user(&self, id: &str, claims: &Claims) -> Result<(), AppError> {
+        // TODO: add || role == admin or smth like that
+        if claims.sub != id {
+            return Err(AppError::Forbidden);
+        }
+
         self.repository.delete(id).await
     }
 }
