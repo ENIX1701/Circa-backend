@@ -8,17 +8,26 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT NOT NULL,
     phone TEXT NOT NULL,
     role TEXT NOT NULL,
-    status TEXT NOT NULL
+    status TEXT NOT NULL,
+    availability_hours TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS magic_tokens (
+    id TEXT PRIMARY KEY NOT NULL,
+    user_id TEXT NOT NULL,
+    token TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used BOOLEAN NOT NULL DEFAULT 0
 );
 
 -- clear past dev data if present
 DELETE FROM users WHERE email IN ('alice@circa.local', 'bob@circa.local');
 
-INSERT INTO users (id, name, surname, email, phone, role, status)
-VALUES ('019c8555-7a32-719a-bbfc-289d208c2996', 'Alice', 'Lovelace', 'alice@circa.local', '+1-023-456-789', 'admin', 'active');
+INSERT INTO users (id, name, surname, email, phone, role, status, availability_hours)
+VALUES ('019c8555-7a32-719a-bbfc-289d208c2996', 'Alice', 'Lovelace', 'alice@circa.local', '+1-023-456-789', 'admin', 'active', 'Mon 9:00-18:00');
 
-INSERT INTO users (id, name, surname, email, phone, role, status)
-VALUES ('019c8555-7a32-7972-8961-f2c2b29ebd22', 'Bob', 'Birkenstock', 'bob@circa.local', '+1-321-654-987', 'organizer', 'inactive');
+INSERT INTO users (id, name, surname, email, phone, role, status, availability_hours)
+VALUES ('019c8555-7a32-7972-8961-f2c2b29ebd22', 'Bob', 'Birkenstock', 'bob@circa.local', '+1-321-654-987', 'organizer', 'inactive', '');
 
 -- check if added correctly :3
 SELECT id, name, email, role, status FROM users;

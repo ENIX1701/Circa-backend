@@ -7,6 +7,8 @@ use circa_backend::user::{repository::UserRepository, service::UserService};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    env_logger::init();
+
     let config = Config::init();
     let db_conn = db::establish_connection(&config.database_url)
         .await
