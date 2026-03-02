@@ -4,7 +4,7 @@ use crate::{
 };
 use chrono::Utc;
 use jsonwebtoken::{EncodingKey, Header, encode};
-use rand::Rng;
+use rand::RngExt;
 use sea_orm::*;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -41,8 +41,8 @@ pub async fn create_magic_token(
     user_id: &str,
     frontend_url: &str,
 ) -> Result<MagicLinkResponse, AppError> {
-    let token: String = rand::thread_rng()
-        .sample_iter(&rand::distributions::Alphanumeric)
+    let token: String = rand::rng()
+        .sample_iter(&rand::distr::Alphanumeric)
         .take(64)
         .map(char::from)
         .collect();
@@ -78,7 +78,7 @@ pub async fn verify_magic_token(db: &DatabaseConnection, token: &str) -> Result<
         .one(db)
         .await
         .map_err(|_| AppError::InternalServerError)?
-        .ok_or_else(|| AppError::BadRequest("Invalid or expired magic link".to_string()));
+        .ok_or_else(|| AppError::BadRequest("Invalid or expired magic link".to_string()))?;
 
     let expires_at = chrono::DateTime::parse_from_rfc3339(&record.expires_at)
         .map_err(|_| AppError::InternalServerError)?;
@@ -87,7 +87,7 @@ pub async fn verify_magic_token(db: &DatabaseConnection, token: &str) -> Result<
         return Err(AppError::BadRequest("Magic link has expired".to_string()));
     }
 
-    let mut active: magic_entity::ActiveModel = record.into();
+    let mut active: magic_entity::ActiveModel = record.clone().into();
     active.used = Set(true);
     active
         .update(db)

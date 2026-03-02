@@ -22,6 +22,7 @@ fn setup_user_service_with_user() -> web::Data<UserService> {
             phone: "123".to_string(),
             role: Role::Admin,
             status: Status::Active,
+            availability_hours: "".to_string(),
         }]])
         .into_connection();
 

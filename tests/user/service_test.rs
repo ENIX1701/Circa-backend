@@ -25,6 +25,7 @@ fn setup_mock_db_with_user() -> sea_orm::DatabaseConnection {
             phone: "123".to_string(),
             role: Role::Organizer,
             status: Status::Active,
+            availability_hours: "".to_string(),
         }]])
         .append_exec_results([sea_orm::MockExecResult {
             last_insert_id: 1,
@@ -47,6 +48,7 @@ async fn test_get_users_success() {
                 phone: "123".to_string(),
                 role: Role::Admin,
                 status: Status::Active,
+                availability_hours: "".to_string(),
             },
             Model {
                 id: "2".to_string(),
@@ -56,6 +58,7 @@ async fn test_get_users_success() {
                 phone: "456".to_string(),
                 role: Role::Volunteer,
                 status: Status::Active,
+                availability_hours: "".to_string(),
             },
         ]])
         .into_connection();
@@ -141,6 +144,7 @@ async fn test_create_user_success() {
         email: "john@example.com".to_string(),
         phone: "123".to_string(),
         role: UserRole::Organizer,
+        availability_hours: "".to_string(),
     };
 
     let result = service.create_user(req).await;
@@ -159,6 +163,7 @@ async fn test_create_user_empty_email() {
         email: "".to_string(),
         phone: "123".to_string(),
         role: UserRole::Organizer,
+        availability_hours: "".to_string(),
     };
 
     let result = service.create_user(req).await;
@@ -183,6 +188,7 @@ async fn test_update_user_as_self() {
                 phone: "123".to_string(),
                 role: Role::Volunteer,
                 status: Status::Active,
+                availability_hours: "".to_string(),
             }],
             vec![Model {
                 id: "1".to_string(),
@@ -192,6 +198,7 @@ async fn test_update_user_as_self() {
                 phone: "123".to_string(),
                 role: Role::Volunteer,
                 status: Status::Active,
+                availability_hours: "".to_string(),
             }],
         ])
         .append_exec_results([sea_orm::MockExecResult {
@@ -209,6 +216,7 @@ async fn test_update_user_as_self() {
         phone: None,
         role: None,
         status: None,
+        availability_hours: None,
     };
 
     let result = service.update_user("1", req, &claims).await;
@@ -228,6 +236,7 @@ async fn test_update_user_as_admin() {
                 phone: "123".to_string(),
                 role: Role::Volunteer,
                 status: Status::Active,
+                availability_hours: "".to_string(),
             }],
             vec![Model {
                 id: "2".to_string(),
@@ -237,6 +246,7 @@ async fn test_update_user_as_admin() {
                 phone: "123".to_string(),
                 role: Role::Volunteer,
                 status: Status::Active,
+                availability_hours: "".to_string(),
             }],
         ])
         .append_exec_results([sea_orm::MockExecResult {
@@ -254,6 +264,7 @@ async fn test_update_user_as_admin() {
         phone: None,
         role: None,
         status: None,
+        availability_hours: None,
     };
 
     let result = service.update_user("2", req, &claims).await;
@@ -272,6 +283,7 @@ async fn test_update_user_as_organizer() {
                 phone: "123".to_string(),
                 role: Role::Volunteer,
                 status: Status::Active,
+                availability_hours: "".to_string(),
             }],
             vec![Model {
                 id: "2".to_string(),
@@ -281,6 +293,7 @@ async fn test_update_user_as_organizer() {
                 phone: "123".to_string(),
                 role: Role::Volunteer,
                 status: Status::Active,
+                availability_hours: "".to_string(),
             }],
         ])
         .append_exec_results([sea_orm::MockExecResult {
@@ -298,6 +311,7 @@ async fn test_update_user_as_organizer() {
         phone: None,
         role: None,
         status: None,
+        availability_hours: None,
     };
 
     let result = service.update_user("2", req, &claims).await;
@@ -317,6 +331,7 @@ async fn test_update_user_forbidden() {
         phone: None,
         role: None,
         status: None,
+        availability_hours: None,
     };
 
     let result = service.update_user("1", req, &claims).await;

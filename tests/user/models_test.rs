@@ -39,6 +39,7 @@ fn test_model_to_user_conversion() {
         phone: "123456789".to_string(),
         role: Role::Volunteer,
         status: Status::Active,
+        availability_hours: "Mon 09:00-17:00".to_string(),
     };
 
     let user: User = model.into();
@@ -50,6 +51,7 @@ fn test_model_to_user_conversion() {
     assert_eq!(user.phone, "123456789");
     assert_eq!(user.role, UserRole::Volunteer);
     assert_eq!(user.status, UserStatus::Active);
+    assert_eq!(user.availability_hours, "Mon 09:00-17:00");
 }
 
 #[test]

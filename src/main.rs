@@ -12,7 +12,7 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to connect to the database :c");
 
-    let user_service = web::Data::new(UserService::new(UserRepository::new(db_conn)));
+    let user_service = web::Data::new(UserService::new(UserRepository::new(db_conn.clone())));
     let jwt_secret = web::Data::new(config.jwt_secret);
     let frontend_url = web::Data::new(config.frontend_url);
     let db_data = web::Data::new(db_conn);
