@@ -36,6 +36,7 @@ pub struct Model {
     pub phone: String,
     pub role: Role,
     pub status: Status,
+    pub availability_hours: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

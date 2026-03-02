@@ -84,6 +84,7 @@ pub struct User {
     pub phone: String,
     pub role: UserRole,
     pub status: UserStatus,
+    pub availability_hours: String,
 }
 
 impl From<entity::Model> for User {
@@ -96,6 +97,7 @@ impl From<entity::Model> for User {
             phone: model.phone,
             role: model.role.into(),
             status: model.status.into(),
+            availability_hours: model.availability_hours,
         }
     }
 }
@@ -107,6 +109,8 @@ pub struct CreateUserRequest {
     pub email: String,
     pub phone: String,
     pub role: UserRole,
+    #[serde(default)]
+    pub availability_hours: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -117,4 +121,5 @@ pub struct UpdateUserRequest {
     pub phone: Option<String>,
     pub role: Option<UserRole>,
     pub status: Option<UserStatus>,
+    pub availability_hours: Option<String>,
 }

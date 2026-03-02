@@ -1,15 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
-pub struct LoginRequest {
-    pub email: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct TokenResponse {
-    pub token: String,
-}
-
+// === JWT ===
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
     pub sub: String,
@@ -17,13 +8,26 @@ pub struct Claims {
     pub exp: usize,
 }
 
-// TODO: check how things like these are even made
-// ideally this would be a magic link sent to the user's inbox
-// mail servers are a pain to set up correctly tho QwQ
-pub struct ChallengeRequest {
-    pub uhh: String,
+#[derive(Debug, Serialize)]
+pub struct TokenResponse {
+    pub token: String,
 }
 
-pub struct ChallengeResponse {
-    pub umm: String,
+// === MAGIC LINK ===
+// for now it'll follow a basic challenge/response model
+// submit email to get magic link -> respond with magic link ->
+// user responds with token -> if valid, gets JWT back
+#[derive(Debug, Deserialize)]
+pub struct MagicLinkRequest {
+    pub email: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct MagicLinkResponse {
+    pub message: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct VerifyRequest {
+    pub token: String,
 }

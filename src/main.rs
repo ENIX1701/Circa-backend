@@ -14,6 +14,8 @@ async fn main() -> std::io::Result<()> {
 
     let user_service = web::Data::new(UserService::new(UserRepository::new(db_conn)));
     let jwt_secret = web::Data::new(config.jwt_secret);
+    let frontend_url = web::Data::new(config.frontend_url);
+    let db_data = web::Data::new(db_conn);
 
     println!("Server starting at 0.0.0.0:8080");
 
@@ -21,6 +23,8 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(user_service.clone())
             .app_data(jwt_secret.clone())
+            .app_data(frontend_url.clone())
+            .app_data(db_data.clone())
             .configure(user::routes::config)
             .configure(auth::routes::config)
     })

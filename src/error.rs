@@ -2,7 +2,7 @@ use actix_web::{HttpResponse, ResponseError, http::StatusCode};
 use derive_more::Display;
 use serde_json;
 
-#[derive(Debug, Display)]
+#[derive(Debug, Display, Clone)]
 pub enum AppError {
     #[display("Internal server error")]
     InternalServerError,

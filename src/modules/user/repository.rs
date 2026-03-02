@@ -52,6 +52,7 @@ impl UserRepository {
             phone: Set(dto.phone),
             role: Set(dto.role.into()),
             status: Set(super::entity::Status::Active),
+            availability_hours: Set(dto.availability_hours),
         };
 
         let result = new_user
@@ -88,6 +89,9 @@ impl UserRepository {
             }
             if let Some(status) = dto.status {
                 active_model.status = Set(status.into());
+            }
+            if let Some(availability_hours) = dto.availability_hours {
+                active_model.availability_hours = Set(availability_hours);
             }
 
             let result = active_model
