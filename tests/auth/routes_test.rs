@@ -193,6 +193,50 @@ async fn test_request_magic_link_db_insert_failure() {
     assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
 }
 
+#[actix_web::test]
+async fn test_request_magic_link_invalid_json() {
+    let magic_db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
+
+    let app = test::init_service(
+        App::new()
+            .app_data(setup_user_service_with_user())
+            .app_data(make_frontend_url())
+            .app_data(make_mock_db(magic_db))
+            .configure(auth::routes::config),
+    )
+    .await;
+
+    let req = test::TestRequest::post()
+        .uri("/auth/request-link")
+        .insert_header(("Content-Type", "application/json"))
+        .set_payload(r#"{"not_email": "value"}"#)
+        .to_request();
+
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[actix_web::test]
+async fn test_request_magic_link_empty_body() {
+    let magic_db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
+
+    let app = test::init_service(
+        App::new()
+            .app_data(setup_user_service_with_user())
+            .app_data(make_frontend_url())
+            .app_data(make_mock_db(magic_db))
+            .configure(auth::routes::config),
+    )
+    .await;
+
+    let req = test::TestRequest::post()
+        .uri("/auth/request-link")
+        .to_request();
+
+    let resp = test::call_service(&app, req).await;
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
 // ── /auth/verify ─────────────────────────────────────────────────────
 //
 // The verify handler extracts web::Data<String> as jwt_secret.

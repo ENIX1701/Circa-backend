@@ -79,6 +79,18 @@ fn test_not_found_error_response() {
 }
 
 #[test]
+fn test_unauthorized_display() {
+    let err = AppError::Unauthorized;
+    assert_eq!(err.to_string(), "Unauthorized");
+}
+
+#[test]
+fn test_forbidden_display() {
+    let err = AppError::Forbidden;
+    assert_eq!(err.to_string(), "Forbidden");
+}
+
+#[test]
 fn test_internal_server_error_response() {
     let err = AppError::InternalServerError;
     let response = err.error_response();

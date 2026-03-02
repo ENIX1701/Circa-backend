@@ -83,6 +83,17 @@ async fn test_get_users_empty() {
     assert_eq!(result.unwrap().len(), 0);
 }
 
+#[tokio::test]
+async fn test_get_users_db_failure() {
+    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
+
+    let service = UserService::new(UserRepository::new(db));
+    let result = service.get_users().await;
+
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().to_string(), "Internal server error");
+}
+
 // ── get_user ─────────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -107,6 +118,17 @@ async fn test_get_user_not_found() {
     assert_eq!(result.unwrap_err().to_string(), "Not found: User not found");
 }
 
+#[tokio::test]
+async fn test_get_user_db_failure() {
+    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
+
+    let service = UserService::new(UserRepository::new(db));
+    let result = service.get_user("1").await;
+
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().to_string(), "Internal server error");
+}
+
 // ── get_user_by_email ────────────────────────────────────────────────
 
 #[tokio::test]
@@ -129,6 +151,17 @@ async fn test_get_user_by_email_not_found() {
     let result = service.get_user_by_email("nobody@example.com").await;
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().to_string(), "Not found: User not found");
+}
+
+#[tokio::test]
+async fn test_get_user_by_email_db_failure() {
+    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
+
+    let service = UserService::new(UserRepository::new(db));
+    let result = service.get_user_by_email("john@example.com").await;
+
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().to_string(), "Internal server error");
 }
 
 // ── create_user ──────────────────────────────────────────────────────
@@ -172,6 +205,26 @@ async fn test_create_user_empty_email() {
         result.unwrap_err().to_string(),
         "Bad request: Email is required"
     );
+}
+
+#[tokio::test]
+async fn test_create_user_db_failure() {
+    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
+
+    let service = UserService::new(UserRepository::new(db));
+
+    let req = CreateUserRequest {
+        name: "John".to_string(),
+        surname: "Doe".to_string(),
+        email: "john@example.com".to_string(),
+        phone: "123".to_string(),
+        role: UserRole::Organizer,
+        availability_hours: "".to_string(),
+    };
+
+    let result = service.create_user(req).await;
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().to_string(), "Internal server error");
 }
 
 // ── update_user ──────────────────────────────────────────────────────
@@ -319,6 +372,71 @@ async fn test_update_user_as_organizer() {
 }
 
 #[tokio::test]
+async fn test_update_user_as_staff_forbidden() {
+    let db = setup_mock_db_with_user();
+    let service = UserService::new(UserRepository::new(db));
+    let claims = make_claims("staff-id", "staff");
+
+    let req = UpdateUserRequest {
+        name: Some("Hacked".to_string()),
+        surname: None,
+        email: None,
+        phone: None,
+        role: None,
+        status: None,
+        availability_hours: None,
+    };
+
+    let result = service.update_user("1", req, &claims).await;
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().to_string(), "Forbidden");
+}
+
+#[tokio::test]
+async fn test_update_user_not_found() {
+    let db = MockDatabase::new(DatabaseBackend::Sqlite)
+        .append_query_results([Vec::<Model>::new()])
+        .into_connection();
+    let service = UserService::new(UserRepository::new(db));
+    let claims = make_claims("admin-id", "admin");
+
+    let req = UpdateUserRequest {
+        name: Some("Ghost".to_string()),
+        surname: None,
+        email: None,
+        phone: None,
+        role: None,
+        status: None,
+        availability_hours: None,
+    };
+
+    let result = service.update_user("999", req, &claims).await;
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().to_string(), "Not found: User not found");
+}
+
+#[tokio::test]
+async fn test_update_user_db_failure() {
+    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
+    let service = UserService::new(UserRepository::new(db));
+    let claims = make_claims("admin-id", "admin");
+
+    let req = UpdateUserRequest {
+        name: Some("Fail".to_string()),
+        surname: None,
+        email: None,
+        phone: None,
+        role: None,
+        status: None,
+        availability_hours: None,
+    };
+
+    let result = service.update_user("1", req, &claims).await;
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().to_string(), "Internal server error");
+}
+
+#[tokio::test]
 async fn test_update_user_forbidden() {
     let db = setup_mock_db_with_user();
     let service = UserService::new(UserRepository::new(db));
@@ -391,6 +509,28 @@ async fn test_delete_user_forbidden_as_organizer() {
     let result = service.delete_user("1", &claims).await;
     assert!(result.is_err());
     assert_eq!(result.unwrap_err().to_string(), "Forbidden");
+}
+
+#[tokio::test]
+async fn test_delete_user_as_staff_forbidden() {
+    let db = setup_mock_db_with_user();
+    let service = UserService::new(UserRepository::new(db));
+    let claims = make_claims("staff-id", "staff");
+
+    let result = service.delete_user("1", &claims).await;
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().to_string(), "Forbidden");
+}
+
+#[tokio::test]
+async fn test_delete_user_db_failure() {
+    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
+    let service = UserService::new(UserRepository::new(db));
+    let claims = make_claims("admin-id", "admin");
+
+    let result = service.delete_user("1", &claims).await;
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().to_string(), "Internal server error");
 }
 
 #[tokio::test]
