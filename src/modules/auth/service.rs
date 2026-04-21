@@ -1,14 +1,34 @@
 use crate::{
-    auth::models::{Claims, MagicLinkResponse, TokenResponse},
+    auth::{
+        delivery::{MagicLinkDelivery, MagicLinkDeliveryPayload},
+        models::{Claims, MagicLinkResponse, TestInboxLinkPreview, TokenResponse},
+    },
     error::AppError,
 };
 use chrono::Utc;
 use jsonwebtoken::{EncodingKey, Header, encode};
 use rand::RngExt;
-use sea_orm::*;
+use sea_orm::sea_query::Expr;
+use sea_orm::{
+    ActiveValue::Set, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder,
+};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use super::entity::{self as magic_entity, Entity as MagicTokenEntity};
+use super::{
+    entity::{self as magic_entity, Entity as MagicTokenEntity},
+    outbox_entity::{self, Entity as OutboxEntity},
+};
+
+pub const GENERIC_MAGIC_LINK_MESSAGE: &str =
+    "If that email is registered, a magic link has been sent";
+
+// for security we'll just return a generic message
+// this isn't *required* now, but it'll be handy in the future
+pub fn generic_magic_link_response() -> MagicLinkResponse {
+    MagicLinkResponse {
+        message: GENERIC_MAGIC_LINK_MESSAGE.to_string(),
+    }
+}
 
 pub async fn generate_jwt(
     user_id: &str,
@@ -38,7 +58,9 @@ pub async fn generate_jwt(
 
 pub async fn create_magic_token(
     db: &DatabaseConnection,
+    delivery: &dyn MagicLinkDelivery,
     user_id: &str,
+    email: &str,
     frontend_url: &str,
 ) -> Result<MagicLinkResponse, AppError> {
     let token: String = rand::rng()
@@ -51,24 +73,31 @@ pub async fn create_magic_token(
     let expires_at = (Utc::now() + chrono::Duration::minutes(15)).to_rfc3339();
 
     let record = magic_entity::ActiveModel {
-        id: Set(id),
+        id: Set(id.clone()),
         user_id: Set(user_id.to_string()),
         token: Set(token.clone()),
-        expires_at: Set(expires_at),
+        expires_at: Set(expires_at.clone()),
         used: Set(false),
     };
 
-    record
-        .insert(db)
+    MagicTokenEntity::insert(record)
+        .exec(db)
         .await
         .map_err(|_| AppError::InternalServerError)?;
 
-    let link = format!("{}/login?token={}", frontend_url, token);
-    println!("[MAGIC LINK] {}", link);
+    let payload = MagicLinkDeliveryPayload {
+        email: email.to_string(),
+        magic_token_id: id.clone(),
+        magic_link: format!("{}/login?token={}", frontend_url, token),
+        expires_at,
+    };
 
-    Ok(MagicLinkResponse {
-        message: "Magic link sent :3 check your inbox! (server console for now...)".to_string(),
-    })
+    if let Err(err) = delivery.deliver(db, &payload).await {
+        let _ = MagicTokenEntity::delete_by_id(id).exec(db).await;
+        return Err(err);
+    }
+
+    Ok(generic_magic_link_response())
 }
 
 pub async fn verify_magic_token(db: &DatabaseConnection, token: &str) -> Result<String, AppError> {
@@ -83,16 +112,45 @@ pub async fn verify_magic_token(db: &DatabaseConnection, token: &str) -> Result<
     let expires_at = chrono::DateTime::parse_from_rfc3339(&record.expires_at)
         .map_err(|_| AppError::InternalServerError)?;
 
-    if Utc::now() > expires_at {
+    if Utc::now() > expires_at.with_timezone(&Utc) {
         return Err(AppError::BadRequest("Magic link has expired".to_string()));
     }
 
-    let mut active: magic_entity::ActiveModel = record.clone().into();
-    active.used = Set(true);
-    active
-        .update(db)
+    MagicTokenEntity::update_many()
+        .col_expr(magic_entity::Column::Used, Expr::value(true))
+        .filter(magic_entity::Column::Id.eq(record.id.clone()))
+        .exec(db)
+        .await
+        .map_err(|_| AppError::InternalServerError)?;
+
+    OutboxEntity::update_many()
+        .col_expr(outbox_entity::Column::Used, Expr::value(true))
+        .filter(outbox_entity::Column::MagicTokenId.eq(record.id.clone()))
+        .exec(db)
         .await
         .map_err(|_| AppError::InternalServerError)?;
 
     Ok(record.user_id)
+}
+
+pub async fn get_latest_test_inbox_link(
+    db: &DatabaseConnection,
+    email: &str,
+) -> Result<TestInboxLinkPreview, AppError> {
+    let record = OutboxEntity::find()
+        .filter(outbox_entity::Column::Email.eq(email.to_string()))
+        .filter(outbox_entity::Column::Used.eq(false))
+        .filter(outbox_entity::Column::ExpiresAt.gt(Utc::now().to_rfc3339()))
+        .order_by_desc(outbox_entity::Column::CreatedAt)
+        .one(db)
+        .await
+        .map_err(|_| AppError::InternalServerError)?
+        .ok_or_else(|| AppError::NotFound("No valid magic link found".to_string()))?;
+
+    Ok(TestInboxLinkPreview {
+        email: record.email,
+        magic_link: record.magic_link,
+        requested_at: record.created_at,
+        expires_at: record.expires_at,
+    })
 }

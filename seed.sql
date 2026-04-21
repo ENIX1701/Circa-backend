@@ -20,6 +20,16 @@ CREATE TABLE IF NOT EXISTS magic_tokens (
     used BOOLEAN NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS magic_link_outbox (
+  id TEXT PRIMARY KEY NOT NULL,
+  email TEXT NOT NULL,
+  magic_token_id TEXT NOT NULL,
+  magic_link TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used BOOLEAN NOT NULL DEFAULT 0
+);
+
 -- clear past dev data if present
 DELETE FROM users WHERE email IN ('alice@circa.local', 'bob@circa.local');
 

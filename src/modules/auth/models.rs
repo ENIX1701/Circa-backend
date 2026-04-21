@@ -31,3 +31,17 @@ pub struct MagicLinkResponse {
 pub struct VerifyRequest {
     pub token: String,
 }
+
+// === TEST INBOX ===
+#[derive(Debug, Deserialize)]
+pub struct TestInboxQuery {
+    pub email: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TestInboxLinkPreview {
+    pub email: String,
+    pub magic_link: String,
+    pub requested_at: String,
+    pub expires_at: String,
+}

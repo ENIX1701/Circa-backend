@@ -765,6 +765,7 @@ dependencies = [
  "actix-cors",
  "actix-web",
  "actix-web-httpauth",
+ "async-trait",
  "chrono",
  "derive_more",
  "dotenvy",
