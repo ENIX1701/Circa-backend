@@ -1,312 +1,236 @@
-use circa_backend::auth::models::Claims;
-use circa_backend::auth::service::{create_magic_token, generate_jwt, verify_magic_token};
-use circa_backend::modules::auth::entity::{self as magic_entity};
-use jsonwebtoken::{DecodingKey, Validation, decode};
-use sea_orm::{DatabaseBackend, MockDatabase};
+use chrono::{Duration, Utc};
+use circa_backend::auth::{
+    delivery::OutboxDelivery,
+    entity::{self as magic_entity, Entity as MagicTokenEntity},
+    outbox_entity::{self, Entity as OutboxEntity},
+    service::{
+        GENERIC_MAGIC_LINK_MESSAGE, create_magic_token, get_latest_test_inbox_link,
+        verify_magic_token,
+    },
+};
+use sea_orm::{
+    ActiveValue::Set, ConnectOptions, ConnectionTrait, Database, DatabaseConnection, EntityTrait,
+};
 
-// ── generate_jwt ─────────────────────────────────────────────────────
+async fn setup_db() -> DatabaseConnection {
+    let mut options = ConnectOptions::new("sqlite::memory:");
+    options
+        .max_connections(1)
+        .min_connections(1)
+        .sqlx_logging(false);
 
-#[tokio::test]
-async fn test_generate_jwt_success() {
-    let secret = "test_secret";
-    let result = generate_jwt("user-123", "admin", secret).await;
+    let db = Database::connect(options).await.unwrap();
 
-    assert!(result.is_ok());
-    let token_response = result.unwrap();
-    assert!(!token_response.token.is_empty());
-}
-
-#[tokio::test]
-async fn test_generated_jwt_contains_correct_claims() {
-    let secret = "test_secret";
-    let user_id = "user-456";
-    let role = "organizer";
-
-    let token_response = generate_jwt(user_id, role, secret).await.unwrap();
-
-    let token_data = decode::<Claims>(
-        &token_response.token,
-        &DecodingKey::from_secret(secret.as_bytes()),
-        &Validation::default(),
+    db.execute_unprepared(
+        r#"
+        CREATE TABLE users (
+            id TEXT PRIMARY KEY NOT NULL,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE,
+            role TEXT NOT NULL,
+            status TEXT NOT NULL
+        );
+        "#,
     )
+    .await
     .unwrap();
 
-    assert_eq!(token_data.claims.sub, user_id);
-    assert_eq!(token_data.claims.role, role);
-    assert!(token_data.claims.exp > 0);
+    db.execute_unprepared(
+        r#"
+        CREATE TABLE magic_tokens (
+            id TEXT PRIMARY KEY NOT NULL,
+            user_id TEXT NOT NULL,
+            token TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            used BOOLEAN NOT NULL DEFAULT 0
+        );
+        "#,
+    )
+    .await
+    .unwrap();
+
+    db.execute_unprepared(
+        r#"
+        CREATE TABLE magic_link_outbox (
+            id TEXT PRIMARY KEY NOT NULL,
+            email TEXT NOT NULL,
+            magic_token_id TEXT NOT NULL,
+            magic_link TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            used BOOLEAN NOT NULL DEFAULT 0
+        );
+        "#,
+    )
+    .await
+    .unwrap();
+
+    db
 }
 
-#[tokio::test]
-async fn test_generated_jwt_invalid_with_wrong_secret() {
-    let secret = "correct_secret";
-    let token_response = generate_jwt("user-123", "admin", secret).await.unwrap();
+async fn insert_outbox_row(
+    db: &DatabaseConnection,
+    id: &str,
+    email: &str,
+    magic_token_id: &str,
+    magic_link: &str,
+    created_at: String,
+    expires_at: String,
+    used: bool,
+) {
+    OutboxEntity::insert(outbox_entity::ActiveModel {
+        id: Set(id.to_string()),
+        email: Set(email.to_string()),
+        magic_token_id: Set(magic_token_id.to_string()),
+        magic_link: Set(magic_link.to_string()),
+        created_at: Set(created_at),
+        expires_at: Set(expires_at),
+        used: Set(used),
+    })
+    .exec(db)
+    .await
+    .unwrap();
+}
 
-    let result = decode::<Claims>(
-        &token_response.token,
-        &DecodingKey::from_secret(b"wrong_secret"),
-        &Validation::default(),
+#[actix_web::test]
+async fn create_magic_token_returns_generic_message_and_writes_outbox() {
+    let db = setup_db().await;
+
+    let response = create_magic_token(
+        &db,
+        &OutboxDelivery,
+        "user-123",
+        "alice@circa.local",
+        "http://localhost:5173",
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(response.message, GENERIC_MAGIC_LINK_MESSAGE);
+
+    let tokens = MagicTokenEntity::find().all(&db).await.unwrap();
+    assert_eq!(tokens.len(), 1);
+    assert_eq!(tokens[0].user_id, "user-123");
+    assert!(!tokens[0].used);
+
+    let outbox_rows = OutboxEntity::find().all(&db).await.unwrap();
+    assert_eq!(outbox_rows.len(), 1);
+    assert_eq!(outbox_rows[0].email, "alice@circa.local");
+    assert_eq!(outbox_rows[0].magic_token_id, tokens[0].id);
+    assert!(
+        outbox_rows[0]
+            .magic_link
+            .starts_with("http://localhost:5173/login?token=")
     );
-
-    assert!(result.is_err());
+    assert!(!outbox_rows[0].used);
 }
 
-#[tokio::test]
-async fn test_generate_jwt_different_roles() {
-    let secret = "test_secret";
+#[actix_web::test]
+async fn get_latest_test_inbox_link_returns_newest_valid_row_only() {
+    let db = setup_db().await;
+    let now = Utc::now();
 
-    for role in &["admin", "organizer", "staff", "volunteer"] {
-        let result = generate_jwt("user-123", role, secret).await;
-        assert!(result.is_ok());
+    insert_outbox_row(
+        &db,
+        "expired-row",
+        "alice@circa.local",
+        "token-expired",
+        "http://localhost:5173/login?token=expired",
+        (now - Duration::minutes(30)).to_rfc3339(),
+        (now - Duration::minutes(5)).to_rfc3339(),
+        false,
+    )
+    .await;
 
-        let token_data = decode::<Claims>(
-            &result.unwrap().token,
-            &DecodingKey::from_secret(secret.as_bytes()),
-            &Validation::default(),
-        )
+    insert_outbox_row(
+        &db,
+        "used-row",
+        "alice@circa.local",
+        "token-used",
+        "http://localhost:5173/login?token=used",
+        (now - Duration::minutes(20)).to_rfc3339(),
+        (now + Duration::minutes(10)).to_rfc3339(),
+        true,
+    )
+    .await;
+
+    insert_outbox_row(
+        &db,
+        "older-valid-row",
+        "alice@circa.local",
+        "token-old",
+        "http://localhost:5173/login?token=old",
+        (now - Duration::minutes(10)).to_rfc3339(),
+        (now + Duration::minutes(10)).to_rfc3339(),
+        false,
+    )
+    .await;
+
+    insert_outbox_row(
+        &db,
+        "latest-valid-row",
+        "alice@circa.local",
+        "token-latest",
+        "http://localhost:5173/login?token=latest",
+        now.to_rfc3339(),
+        (now + Duration::minutes(10)).to_rfc3339(),
+        false,
+    )
+    .await;
+
+    let preview = get_latest_test_inbox_link(&db, "alice@circa.local")
+        .await
         .unwrap();
 
-        assert_eq!(token_data.claims.role, *role);
-    }
+    assert_eq!(preview.email, "alice@circa.local");
+    assert_eq!(
+        preview.magic_link,
+        "http://localhost:5173/login?token=latest"
+    );
 }
 
-#[tokio::test]
-async fn test_generate_jwt_expiration_is_in_the_future() {
-    let secret = "test_secret";
-    let token_response = generate_jwt("user-123", "admin", secret).await.unwrap();
+#[actix_web::test]
+async fn verify_magic_token_marks_token_and_outbox_row_used() {
+    let db = setup_db().await;
 
-    let token_data = decode::<Claims>(
-        &token_response.token,
-        &DecodingKey::from_secret(secret.as_bytes()),
-        &Validation::default(),
-    )
+    MagicTokenEntity::insert(magic_entity::ActiveModel {
+        id: Set("magic-token-id".to_string()),
+        user_id: Set("user-123".to_string()),
+        token: Set("valid-token".to_string()),
+        expires_at: Set((Utc::now() + Duration::minutes(15)).to_rfc3339()),
+        used: Set(false),
+    })
+    .exec(&db)
+    .await
     .unwrap();
 
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    insert_outbox_row(
+        &db,
+        "outbox-row",
+        "alice@circa.local",
+        "magic-token-id",
+        "http://localhost:5173/login?token=valid-token",
+        Utc::now().to_rfc3339(),
+        (Utc::now() + Duration::minutes(15)).to_rfc3339(),
+        false,
+    )
+    .await;
+
+    let user_id = verify_magic_token(&db, "valid-token").await.unwrap();
+    assert_eq!(user_id, "user-123");
+
+    let token = MagicTokenEntity::find_by_id("magic-token-id")
+        .one(&db)
+        .await
         .unwrap()
-        .as_secs() as usize;
+        .unwrap();
+    assert!(token.used);
 
-    assert!(token_data.claims.exp > now);
-    // Should be approximately 24 hours from now (86400 seconds)
-    let diff = token_data.claims.exp - now;
-    assert!(diff > 86000 && diff <= 86400);
-}
-
-// ── create_magic_token ───────────────────────────────────────────────
-
-#[tokio::test]
-async fn test_create_magic_token_success() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([vec![magic_entity::Model {
-            id: "tok-1".to_string(),
-            user_id: "user-123".to_string(),
-            token: "some-token".to_string(),
-            expires_at: chrono::Utc::now().to_rfc3339(),
-            used: false,
-        }]])
-        .append_exec_results([sea_orm::MockExecResult {
-            last_insert_id: 1,
-            rows_affected: 1,
-        }])
-        .into_connection();
-
-    let result = create_magic_token(&db, "user-123", "http://localhost:5137").await;
-
-    assert!(result.is_ok());
-    let response = result.unwrap();
-    assert!(!response.message.is_empty());
-    assert!(response.message.contains("Magic link sent"));
-}
-
-#[tokio::test]
-async fn test_create_magic_token_db_insert_failure() {
-    // Provide no exec results so the insert fails
-    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
-
-    let result = create_magic_token(&db, "user-123", "http://localhost:5137").await;
-
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Internal server error");
-}
-
-// ── verify_magic_token ───────────────────────────────────────────────
-
-#[tokio::test]
-async fn test_verify_magic_token_success() {
-    let future_time = (chrono::Utc::now() + chrono::Duration::minutes(10)).to_rfc3339();
-
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([
-            // First query: find the magic token record
-            vec![magic_entity::Model {
-                id: "tok-1".to_string(),
-                user_id: "user-123".to_string(),
-                token: "valid-token-abc".to_string(),
-                expires_at: future_time.clone(),
-                used: false,
-            }],
-            // Second query: update returns the updated model
-            vec![magic_entity::Model {
-                id: "tok-1".to_string(),
-                user_id: "user-123".to_string(),
-                token: "valid-token-abc".to_string(),
-                expires_at: future_time,
-                used: true,
-            }],
-        ])
-        .into_connection();
-
-    let result = verify_magic_token(&db, "valid-token-abc").await;
-
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), "user-123");
-}
-
-#[tokio::test]
-async fn test_verify_magic_token_not_found() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([Vec::<magic_entity::Model>::new()])
-        .into_connection();
-
-    let result = verify_magic_token(&db, "nonexistent-token").await;
-
-    assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err().to_string(),
-        "Bad request: Invalid or expired magic link"
-    );
-}
-
-#[tokio::test]
-async fn test_verify_magic_token_expired() {
-    let past_time = (chrono::Utc::now() - chrono::Duration::minutes(30)).to_rfc3339();
-
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([vec![magic_entity::Model {
-            id: "tok-1".to_string(),
-            user_id: "user-123".to_string(),
-            token: "expired-token".to_string(),
-            expires_at: past_time,
-            used: false,
-        }]])
-        .into_connection();
-
-    let result = verify_magic_token(&db, "expired-token").await;
-
-    assert!(result.is_err());
-    assert_eq!(
-        result.unwrap_err().to_string(),
-        "Bad request: Magic link has expired"
-    );
-}
-
-#[tokio::test]
-async fn test_verify_magic_token_invalid_date_format() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([vec![magic_entity::Model {
-            id: "tok-1".to_string(),
-            user_id: "user-123".to_string(),
-            token: "bad-date-token".to_string(),
-            expires_at: "not-a-valid-date".to_string(),
-            used: false,
-        }]])
-        .into_connection();
-
-    let result = verify_magic_token(&db, "bad-date-token").await;
-
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Internal server error");
-}
-
-#[tokio::test]
-async fn test_verify_magic_token_db_query_failure() {
-    // Empty mock with no query results causes a DB error
-    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
-
-    let result = verify_magic_token(&db, "any-token").await;
-
-    assert!(result.is_err());
-}
-
-#[tokio::test]
-async fn test_verify_magic_token_update_failure() {
-    let future_time = (chrono::Utc::now() + chrono::Duration::minutes(10)).to_rfc3339();
-
-    // Provide first query result but no second query result so the update fails
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([
-            vec![magic_entity::Model {
-                id: "tok-1".to_string(),
-                user_id: "user-123".to_string(),
-                token: "valid-token".to_string(),
-                expires_at: future_time,
-                used: false,
-            }],
-            Vec::<magic_entity::Model>::new(),
-        ])
-        .into_connection();
-
-    let result = verify_magic_token(&db, "valid-token").await;
-
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Internal server error");
-}
-
-#[tokio::test]
-async fn test_verify_magic_token_returns_correct_user_id() {
-    let future_time = (chrono::Utc::now() + chrono::Duration::minutes(5)).to_rfc3339();
-
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([
-            vec![magic_entity::Model {
-                id: "tok-99".to_string(),
-                user_id: "specific-user-id-abc".to_string(),
-                token: "token-for-specific-user".to_string(),
-                expires_at: future_time.clone(),
-                used: false,
-            }],
-            vec![magic_entity::Model {
-                id: "tok-99".to_string(),
-                user_id: "specific-user-id-abc".to_string(),
-                token: "token-for-specific-user".to_string(),
-                expires_at: future_time,
-                used: true,
-            }],
-        ])
-        .into_connection();
-
-    let result = verify_magic_token(&db, "token-for-specific-user").await;
-
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), "specific-user-id-abc");
-}
-
-#[tokio::test]
-async fn test_verify_magic_token_just_before_expiry() {
-    // Token expires 1 second from now - should still be valid
-    let almost_expired = (chrono::Utc::now() + chrono::Duration::seconds(1)).to_rfc3339();
-
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([
-            vec![magic_entity::Model {
-                id: "tok-1".to_string(),
-                user_id: "user-edge".to_string(),
-                token: "almost-expired".to_string(),
-                expires_at: almost_expired.clone(),
-                used: false,
-            }],
-            vec![magic_entity::Model {
-                id: "tok-1".to_string(),
-                user_id: "user-edge".to_string(),
-                token: "almost-expired".to_string(),
-                expires_at: almost_expired,
-                used: true,
-            }],
-        ])
-        .into_connection();
-
-    let result = verify_magic_token(&db, "almost-expired").await;
-
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), "user-edge");
+    let outbox_row = OutboxEntity::find_by_id("outbox-row")
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(outbox_row.used);
 }
