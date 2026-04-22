@@ -60,8 +60,8 @@ impl MagicLinkDelivery for OutboxDelivery {
 impl MagicLinkDelivery for SmtpDelivery {
     async fn deliver(
         &self,
-        db: &DatabaseConnection,
-        payload: &MagicLinkDeliveryPayload,
+        _db: &DatabaseConnection,
+        _payload: &MagicLinkDeliveryPayload,
     ) -> Result<(), AppError> {
         Err(AppError::InternalServerError)
     }

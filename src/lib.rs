@@ -4,4 +4,4 @@ pub mod db;
 pub mod error;
 pub mod models;
 pub mod modules;
-pub use modules::{auth, user};
+pub use modules::{auth, event, user};

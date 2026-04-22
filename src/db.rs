@@ -24,6 +24,41 @@ async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
             "#,
         )
         .await?;
+
+        db.execute_unprepared(
+            r#"
+            CREATE TABLE IF NOT EXISTS events (
+              id TEXT PRIMARY KEY NOT NULL,
+              name TEXT NOT NULL,
+              slug TEXT NOT NULL UNIQUE,
+              description TEXT NOT NULL DEFAULT '',
+              venue TEXT NOT NULL,
+              timezone TEXT NOT NULL,
+              starts_at TEXT NOT NULL,
+              ends_at TEXT NOT NULL,
+              status TEXT NOT NULL,
+              created_by_user_id TEXT NOT NULL,
+              destruction_requested_at TEXT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            "#,
+        )
+        .await?;
+
+        db.execute_unprepared(
+            r#"
+            CREATE TABLE IF NOT EXISTS event_memberships (
+              id TEXT PRIMARY KEY NOT NULL,
+              event_id TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              role TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              UNIQUE(event_id, user_id)
+            );
+            "#,
+        )
+        .await?;
     }
 
     Ok(())
