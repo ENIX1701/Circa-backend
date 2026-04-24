@@ -100,6 +100,31 @@ async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
             "#
         )
         .await?;
+
+        db.execute_unprepared(
+            r#"
+            CREATE TABLE IF NOT EXISTS social_posts (
+                id TEXT PRIMARY KEY NOT NULL,
+                event_id TEXT NOT NULL,
+                platform TEXT NOT NULL,
+                title TEXT NOT NULL,
+                body TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            "#
+        )
+        .await?;
+
+        db.execute_unprepared(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_social_posts_event_id_position
+            ON social_posts (event_id, position);
+            "#
+        )
+        .await?;
     }
 
     Ok(())

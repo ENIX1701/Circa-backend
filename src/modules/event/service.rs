@@ -1,8 +1,9 @@
 use super::{
     entity, membership_entity,
     models::{
-        CreateEventRequest, CreatePlannerItemRequest, Event, EventBranding, PlannerItem,
-        UpdatePlannerItemRequest, UpsertEventBrandingRequest,
+        CreateEventRequest, CreatePlannerItemRequest, CreateSocialMediaPostRequest, Event,
+        EventBranding, PlannerItem, SocialPost, UpdatePlannerItemRequest,
+        UpdateSocialMediaPostRequest, UpsertEventBrandingRequest,
     },
     repository::EventRepository,
 };
@@ -219,6 +220,48 @@ impl EventService {
         self.repository.delete_planner_item(event_id, item_id).await
     }
 
+    pub async fn get_social_posts_for_user(&self, event_id: &str, user_id: &str) -> Result<Vec<SocialPost>, AppError> {
+        self.require_event_access(event_id, user_id).await?;
+
+        let posts = self.repository.list_social_posts(event_id).await?;
+        Ok(posts.into_iter().map(SocialPost::from).collect())
+    }
+
+    pub async fn create_social_post(
+        &self,
+        event_id: &str,
+        user_id: &str,
+        req: CreateSocialMediaPostRequest,
+    ) -> Result<SocialPost, AppError> {
+        self.require_event_access(event_id, user_id).await?;
+        self.validate_create_social_post_request(&req)?;
+
+        let post = self.repository.create_social_post(event_id, req).await?;
+        Ok(post.into())
+    }
+
+    pub async fn update_social_post(
+        &self,
+        event_id: &str,
+        post_id: &str,
+        user_id: &str,
+        req: UpdateSocialMediaPostRequest,
+    ) -> Result<SocialPost, AppError> {
+        self.require_event_access(event_id, user_id).await?;
+        self.validate_update_social_post_request(&req)?;
+
+        let post = self.repository.update_social_post(event_id, post_id, req).await?;
+
+        Ok(post.into())
+    }
+
+    pub async fn delete_social_post(
+        &self, event_id: &str, post_id: &str, user_id: &str
+    ) -> Result<(), AppError> {
+        self.require_event_access(event_id, user_id).await?;
+        self.repository.delete_social_post(event_id, post_id).await
+    }
+
     fn validate_create_request(&self, req: &CreateEventRequest) -> Result<(), AppError> {
         if req.name.trim().is_empty() {
             return Err(AppError::BadRequest("Event name is required".to_string()));
@@ -324,6 +367,67 @@ impl EventService {
         Ok(())
     }
 
+    fn validate_create_social_post_request(
+        &self,
+        req: &CreateSocialMediaPostRequest,
+    ) -> Result<(), AppError> {
+        if req.platform.trim().is_empty() {
+            return Err(AppError::BadRequest("Social post platform is requried".to_string()));
+        }
+        
+        if req.title.trim().is_empty() {
+            return Err(AppError::BadRequest("Social post title is requried".to_string()));
+        }
+
+        Ok(())
+    }
+
+    fn validate_update_social_post_request(
+        &self,
+        req: &UpdateSocialMediaPostRequest,
+    ) -> Result<(), AppError> {
+        if req.platform.is_none()
+            && req.title.is_none()
+            && req.body.is_none()
+            && req.status.is_none()
+            && req.position.is_none()
+        {
+            return Err(AppError::BadRequest(
+                "At least one social post field must be provided".to_string(),
+            ));
+        }
+
+        if let Some(platform) = &req.platform {
+            if platform.trim().is_empty() {
+                return Err(AppError::BadRequest("Social post platform cannot be empty".to_string()));
+            }
+        }
+
+        if let Some(title) = &req.title {
+            if title.trim().is_empty() {
+                return Err(AppError::BadRequest(
+                    "Social post title cannot be empty".to_string(),
+                ));
+            }
+        }
+
+        if let Some(status) = &req.status {
+            if !is_valid_social_post_status(status) {
+                return Err(AppError::BadRequest("Social post status must be draft, ready or posted".to_string()));
+            }
+        }
+
+        if let Some(position) = req.position {
+            if position < 0 {
+                return Err(AppError::BadRequest(
+                    "Social post position cannot be negative".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
     async fn require_owner(&self, event_id: &str, user_id: &str) -> Result<(), AppError> {
         let membership = self.repository.find_membership(event_id, user_id).await?;
 
@@ -354,4 +458,8 @@ fn is_valid_hex_color(value: &str) -> bool {
     value.len() == 7
         && value.starts_with('#')
         && value.chars().skip(1).all(|c| c.is_ascii_hexdigit())
+}
+
+fn is_valid_social_post_status(value: &str) -> bool {
+    matches!(value, "draft" | "ready" | "posted")
 }

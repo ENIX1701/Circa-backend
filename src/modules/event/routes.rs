@@ -7,8 +7,8 @@ use crate::{
     error::AppError,
     event::{
         models::{
-            CreateEventRequest, CreatePlannerItemRequest, UpdatePlannerItemRequest,
-            UpsertEventBrandingRequest,
+            CreateEventRequest, CreatePlannerItemRequest, CreateSocialMediaPostRequest,
+            UpdatePlannerItemRequest, UpdateSocialMediaPostRequest, UpsertEventBrandingRequest,
         },
         service::EventService,
     },
@@ -35,6 +35,10 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             )
             .route("/{id}/branding", web::get().to(get_event_branding))
             .route("/{id}/branding", web::put().to(put_event_branding))
+            .route("/{id}/social-posts", web::get().to(get_social_posts))
+            .route("/{id}/social-posts", web::post().to(create_social_post))
+            .route("/{id}/social-posts/{post_id}", web::patch().to(update_social_post))
+            .route("/{id}/social-posts/{post_id}", web::delete().to(delete_social_post))
             .route("/{id}/planner-items", web::get().to(get_planner_items))
             .route("/{id}/planner-items", web::post().to(create_planner_item))
             .route(
@@ -195,6 +199,78 @@ async fn put_event_branding(
         .await?;
 
     Ok(HttpResponse::Ok().json(branding))
+}
+
+async fn get_social_posts(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let posts = service.get_social_posts_for_user(&path.into_inner(), &claims.sub).await?;
+
+    Ok(HttpResponse::Ok().json(posts))
+}
+
+async fn create_social_post(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<String>,
+    body: web::Json<CreateSocialMediaPostRequest>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let post = service.create_social_post(&path.into_inner(), &claims.sub, body.into_inner()).await?;
+
+    Ok(HttpResponse::Ok().json(post))
+}
+
+async fn update_social_post(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<(String, String)>,
+    body: web::Json<UpdateSocialMediaPostRequest>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let (event_id, post_id) = path.into_inner();
+
+    let post = service.update_social_post(&event_id, &post_id, &claims.sub, body.into_inner()).await?;
+
+    Ok(HttpResponse::Ok().json(post))
+}
+
+async fn delete_social_post(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<(String, String)>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let (event_id, post_id) = path.into_inner();
+
+    service
+        .delete_social_post(&event_id, &post_id, &claims.sub)
+        .await?;
+
+    Ok(HttpResponse::NoContent().finish())
 }
 
 async fn get_planner_items(

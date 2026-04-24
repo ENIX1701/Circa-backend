@@ -3,10 +3,11 @@ use super::{
     event_branding_entity::{self, Entity as EventBrandingEntity},
     membership_entity::{self, Entity as EventMembershipEntity},
     models::{
-        CreateEventRequest, CreatePlannerItemRequest, UpdatePlannerItemRequest,
-        UpsertEventBrandingRequest,
+        CreateEventRequest, CreatePlannerItemRequest, CreateSocialMediaPostRequest,
+        UpdatePlannerItemRequest, UpdateSocialMediaPostRequest, UpsertEventBrandingRequest,
     },
     planner_item_entity::{self, Entity as PlannerItemEntity},
+    social_post_entity::{self, Entity as SocialPostEntity},
 };
 use crate::error::AppError;
 use chrono::Utc;
@@ -206,7 +207,10 @@ impl EventRepository {
                 updated_at: Set(now),
             };
 
-            branding.insert(&self.db).await.map_err(|_| AppError::InternalServerError)
+            branding
+                .insert(&self.db)
+                .await
+                .map_err(|_| AppError::InternalServerError)
         }
     }
 
@@ -306,6 +310,114 @@ impl EventRepository {
             .ok_or_else(|| AppError::NotFound("Planner item not found".to_string()))?;
 
         planner_item
+            .delete(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)?;
+
+        Ok(())
+    }
+
+    pub async fn list_social_posts(
+        &self,
+        event_id: &str,
+    ) -> Result<Vec<social_post_entity::Model>, AppError> {
+        SocialPostEntity::find()
+            .filter(social_post_entity::Column::EventId.eq(event_id))
+            .order_by_asc(social_post_entity::Column::Position)
+            .order_by_asc(social_post_entity::Column::CreatedAt)
+            .all(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)
+    }
+
+    pub async fn create_social_post(
+        &self,
+        event_id: &str,
+        dto: CreateSocialMediaPostRequest,
+    ) -> Result<social_post_entity::Model, AppError> {
+        let now = Utc::now().to_rfc3339();
+
+        let next_position = SocialPostEntity::find()
+            .filter(social_post_entity::Column::EventId.eq(event_id))
+            .order_by_desc(social_post_entity::Column::Position)
+            .one(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)?
+            .map(|post| post.position + 1)
+            .unwrap_or(0);
+
+        let social_post = social_post_entity::ActiveModel {
+            id: Set(uuid::Uuid::now_v7().to_string()),
+            event_id: Set(event_id.to_string()),
+            platform: Set(dto.platform),
+            title: Set(dto.title),
+            body: Set(dto.body.unwrap_or_default()),
+            status: Set("draft".to_string()),
+            position: Set(next_position),
+            created_at: Set(now.clone()),
+            updated_at: Set(now),
+        };
+
+        social_post
+            .insert(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)
+    }
+
+    pub async fn update_social_post(
+        &self,
+        event_id: &str,
+        post_id: &str,
+        dto: UpdateSocialMediaPostRequest,
+    ) -> Result<social_post_entity::Model, AppError> {
+        let social_post = SocialPostEntity::find()
+            .filter(social_post_entity::Column::EventId.eq(event_id))
+            .filter(social_post_entity::Column::Id.eq(post_id))
+            .one(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)?
+            .ok_or_else(|| AppError::NotFound("Social post not found".to_string()))?;
+
+        let mut active_model: social_post_entity::ActiveModel = social_post.into();
+
+        if let Some(platform) = dto.platform {
+            active_model.platform = Set(platform);
+        }
+
+        if let Some(title) = dto.title {
+            active_model.title = Set(title);
+        }
+
+        if let Some(body) = dto.body {
+            active_model.body = Set(body);
+        }
+
+        if let Some(status) = dto.status {
+            active_model.status = Set(status);
+        }
+
+        if let Some(position) = dto.position {
+            active_model.position = Set(position);
+        }
+
+        active_model.updated_at = Set(Utc::now().to_rfc3339());
+
+        active_model
+            .update(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)
+    }
+
+    pub async fn delete_social_post(&self, event_id: &str, post_id: &str) -> Result<(), AppError> {
+        let social_post = SocialPostEntity::find()
+            .filter(social_post_entity::Column::EventId.eq(event_id))
+            .filter(social_post_entity::Column::Id.eq(post_id))
+            .one(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)?
+            .ok_or_else(|| AppError::NotFound("Social post not found".to_string()))?;
+
+        social_post
             .delete(&self.db)
             .await
             .map_err(|_| AppError::InternalServerError)?;

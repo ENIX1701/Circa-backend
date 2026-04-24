@@ -1,4 +1,6 @@
-use super::{entity, event_branding_entity, membership_entity, planner_item_entity};
+use super::{
+    entity, event_branding_entity, membership_entity, planner_item_entity, social_post_entity,
+};
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
@@ -226,4 +228,49 @@ pub struct UpsertEventBrandingRequest {
     pub secondary_color: String,
     #[serde(default)]
     pub notes: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct SocialPost {
+    pub id: String,
+    pub event_id: String,
+    pub platform: String,
+    pub title: String,
+    pub body: String,
+    pub status: String,
+    pub position: i32,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<social_post_entity::Model> for SocialPost {
+    fn from(model: social_post_entity::Model) -> Self {
+        Self {
+            id: model.id,
+            event_id: model.event_id,
+            platform: model.platform,
+            title: model.title,
+            body: model.body,
+            status: model.status,
+            position: model.position,
+            created_at: model.created_at,
+            updated_at: model.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreateSocialMediaPostRequest {
+    pub platform: String,
+    pub title: String,
+    pub body: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct UpdateSocialMediaPostRequest {
+    pub platform: Option<String>,
+    pub title: Option<String>,
+    pub body: Option<String>,
+    pub status: Option<String>,
+    pub position: Option<i32>,
 }
