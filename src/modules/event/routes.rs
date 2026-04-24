@@ -6,7 +6,10 @@ use crate::{
     auth::{middleware::jwt_validator, models::Claims},
     error::AppError,
     event::{
-        models::{CreateEventRequest, CreatePlannerItemRequest, UpdatePlannerItemRequest},
+        models::{
+            CreateEventRequest, CreatePlannerItemRequest, UpdatePlannerItemRequest,
+            UpsertEventBrandingRequest,
+        },
         service::EventService,
     },
 };
@@ -30,6 +33,8 @@ pub fn config(cfg: &mut web::ServiceConfig) {
                 "/{id}/cancel-destruction",
                 web::post().to(cancel_destruction),
             )
+            .route("/{id}/branding", web::get().to(get_event_branding))
+            .route("/{id}/branding", web::put().to(put_event_branding))
             .route("/{id}/planner-items", web::get().to(get_planner_items))
             .route("/{id}/planner-items", web::post().to(create_planner_item))
             .route(
@@ -153,6 +158,43 @@ async fn cancel_destruction(
         .cancel_destruction(&path.into_inner(), &claims.sub)
         .await?;
     Ok(HttpResponse::Ok().json(event))
+}
+
+async fn get_event_branding(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let branding = service
+        .get_event_branding_for_user(&path.into_inner(), &claims.sub)
+        .await?;
+
+    Ok(HttpResponse::Ok().json(branding))
+}
+
+async fn put_event_branding(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<String>,
+    body: web::Json<UpsertEventBrandingRequest>
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let branding = service
+        .upsert_event_branding(&path.into_inner(), &claims.sub, body.into_inner())
+        .await?;
+
+    Ok(HttpResponse::Ok().json(branding))
 }
 
 async fn get_planner_items(

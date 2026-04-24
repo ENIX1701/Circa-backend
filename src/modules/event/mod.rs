@@ -1,4 +1,5 @@
 pub mod entity;
+pub mod event_branding_entity;
 pub mod membership_entity;
 pub mod models;
 pub mod planner_item_entity;

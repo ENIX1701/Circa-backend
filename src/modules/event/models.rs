@@ -1,4 +1,4 @@
-use super::{entity, membership_entity, planner_item_entity};
+use super::{entity, event_branding_entity, membership_entity, planner_item_entity};
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
@@ -165,4 +165,65 @@ pub struct UpdatePlannerItemRequest {
     pub notes: Option<String>,
     pub position: Option<i32>,
     pub done: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct EventBranding {
+    pub id: Option<String>,
+    pub event_id: String,
+    pub event_name_override: String,
+    pub tagline: String,
+    pub primary_color: String, // TODO: how to store this more efficiently?
+    pub secondary_color: String,
+    pub notes: String,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+impl EventBranding {
+    pub fn from_model(model: event_branding_entity::Model) -> Self {
+        Self {
+            id: Some(model.id),
+            event_id: model.event_id,
+            event_name_override: model.event_name_override,
+            tagline: model.tagline,
+            primary_color: model.primary_color,
+            secondary_color: model.secondary_color,
+            notes: model.notes,
+            created_at: Some(model.created_at),
+            updated_at: Some(model.updated_at),
+        }
+    }
+
+    pub fn default_for_event(event_id: &str) -> Self {
+        Self {
+            id: None,
+            event_id: event_id.to_string(),
+            event_name_override: String::new(),
+            tagline: String::new(),
+            primary_color: String::new(),
+            secondary_color: String::new(),
+            notes: String::new(),
+            created_at: None,
+            updated_at: None,
+        }
+    }
+}
+
+// this uses a cool new word I've learned
+// upsert
+// it basically means update + insert
+// a single endpoint for both :D
+#[derive(Debug, Deserialize, Serialize)]
+pub struct UpsertEventBrandingRequest {
+    #[serde(default)]
+    pub event_name_override: String,
+    #[serde(default)]
+    pub tagline: String,
+    #[serde(default)]
+    pub primary_color: String,
+    #[serde(default)]
+    pub secondary_color: String,
+    #[serde(default)]
+    pub notes: String,
 }

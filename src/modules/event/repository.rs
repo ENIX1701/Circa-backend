@@ -1,7 +1,11 @@
 use super::{
     entity::{self, Entity as EventEntity},
+    event_branding_entity::{self, Entity as EventBrandingEntity},
     membership_entity::{self, Entity as EventMembershipEntity},
-    models::{CreateEventRequest, CreatePlannerItemRequest, UpdatePlannerItemRequest},
+    models::{
+        CreateEventRequest, CreatePlannerItemRequest, UpdatePlannerItemRequest,
+        UpsertEventBrandingRequest,
+    },
     planner_item_entity::{self, Entity as PlannerItemEntity},
 };
 use crate::error::AppError;
@@ -156,6 +160,54 @@ impl EventRepository {
             .update(&self.db)
             .await
             .map_err(|_| AppError::InternalServerError)
+    }
+
+    pub async fn find_event_branding(
+        &self,
+        event_id: &str,
+    ) -> Result<Option<event_branding_entity::Model>, AppError> {
+        EventBrandingEntity::find()
+            .filter(event_branding_entity::Column::EventId.eq(event_id))
+            .one(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)
+    }
+
+    pub async fn upsert_event_branding(
+        &self,
+        event_id: &str,
+        dto: UpsertEventBrandingRequest,
+    ) -> Result<event_branding_entity::Model, AppError> {
+        let now = Utc::now().to_rfc3339();
+
+        if let Some(existing) = self.find_event_branding(event_id).await? {
+            let mut active_model: event_branding_entity::ActiveModel = existing.into();
+            active_model.event_name_override = Set(dto.event_name_override);
+            active_model.tagline = Set(dto.tagline);
+            active_model.primary_color = Set(dto.primary_color);
+            active_model.secondary_color = Set(dto.secondary_color);
+            active_model.notes = Set(dto.notes);
+            active_model.updated_at = Set(now);
+
+            active_model
+                .update(&self.db)
+                .await
+                .map_err(|_| AppError::InternalServerError)
+        } else {
+            let branding = event_branding_entity::ActiveModel {
+                id: Set(uuid::Uuid::now_v7().to_string()),
+                event_id: Set(event_id.to_string()),
+                event_name_override: Set(dto.event_name_override),
+                tagline: Set(dto.tagline),
+                primary_color: Set(dto.primary_color),
+                secondary_color: Set(dto.secondary_color),
+                notes: Set(dto.notes),
+                created_at: Set(now.clone()),
+                updated_at: Set(now),
+            };
+
+            branding.insert(&self.db).await.map_err(|_| AppError::InternalServerError)
+        }
     }
 
     pub async fn list_planner_items(

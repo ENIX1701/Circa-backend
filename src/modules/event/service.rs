@@ -1,7 +1,8 @@
 use super::{
     entity, membership_entity,
     models::{
-        CreateEventRequest, CreatePlannerItemRequest, Event, PlannerItem, UpdatePlannerItemRequest,
+        CreateEventRequest, CreatePlannerItemRequest, Event, EventBranding, PlannerItem,
+        UpdatePlannerItemRequest, UpsertEventBrandingRequest,
     },
     repository::EventRepository,
 };
@@ -138,6 +139,34 @@ impl EventService {
         Ok(Event::from_parts(updated, membership_entity::Role::Owner))
     }
 
+    pub async fn get_event_branding_for_user(
+        &self,
+        event_id: &str,
+        user_id: &str,
+    ) -> Result<EventBranding, AppError> {
+        self.require_event_access(event_id, user_id).await?;
+
+        let branding = self.repository.find_event_branding(event_id).await?;
+
+        Ok(match branding {
+            Some(model) => EventBranding::from_model(model),
+            None => EventBranding::default_for_event(event_id),
+        })
+    }
+
+    pub async fn upsert_event_branding(
+        &self,
+        event_id: &str,
+        user_id: &str,
+        req: UpsertEventBrandingRequest,
+    ) -> Result<EventBranding, AppError> {
+        self.require_event_access(event_id, user_id).await?;
+        self.validate_upsert_event_branding_request(&req)?;
+
+        let branding = self.repository.upsert_event_branding(event_id, req).await?;
+        Ok(EventBranding::from_model(branding))
+    }
+
     pub async fn get_planner_items_for_user(
         &self,
         event_id: &str,
@@ -243,6 +272,25 @@ impl EventService {
         Ok(())
     }
 
+    fn validate_upsert_event_branding_request(
+        &self,
+        req: &UpsertEventBrandingRequest,
+    ) -> Result<(), AppError> {
+        if !req.primary_color.is_empty() && !is_valid_hex_color(&req.primary_color) {
+            return Err(AppError::BadRequest(
+                "primary_color must be a valid hex color".to_string(),
+            ));
+        }
+
+        if !req.secondary_color.is_empty() && !is_valid_hex_color(&req.secondary_color) {
+            return Err(AppError::BadRequest(
+                "secondary_color must be a valid hex color".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
     fn validate_update_planner_item_request(
         &self,
         req: &UpdatePlannerItemRequest,
@@ -300,4 +348,10 @@ fn is_valid_slug(value: &str) -> bool {
     value
         .chars()
         .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+fn is_valid_hex_color(value: &str) -> bool {
+    value.len() == 7
+        && value.starts_with('#')
+        && value.chars().skip(1).all(|c| c.is_ascii_hexdigit())
 }

@@ -1,4 +1,0 @@
-- [x] TODO: create DTOs and conversion from entities to models and vice versa
-- [ ] auth qwq
-  - [ ] challenge -> response for login (currently anyone can be anyone else... how cool!)
-- [ ] fe integration
