@@ -63,7 +63,7 @@ async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
         db.execute_unprepared(
             r#"
             CREATE TABLE IF NOT EXISTS event_branding (
-                id TEXT PRIAMRY KEY NOT NULL,
+                id TEXT PRIMARY KEY NOT NULL,
                 event_id TEXT NOT NULL UNIQUE,
                 event_name_override TEXT NOT NULL DEFAULT '',
                 tagline TEXT NOT NULL DEFAULT '',
