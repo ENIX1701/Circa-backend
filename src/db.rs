@@ -59,6 +59,28 @@ async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
             "#,
         )
         .await?;
+
+        db.execute_unprepared(
+            r#"
+            CREATE TABLE IF NOT EXISTS planner_items (
+                id TEXT PRIMARY KEY NOT NULL,
+                event_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                notes TEXT NOT NULL DEFAULT '',
+                position INTEGER NOT NULL,
+                done BOOLEAN NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            "#
+        ).await?;
+
+        db.execute_unprepared(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_planner_items_event_id_position
+            ON planner_items (event_id, position);
+            "#
+        ).await?;
     }
 
     Ok(())

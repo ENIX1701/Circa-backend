@@ -1,4 +1,4 @@
-use super::{entity, membership_entity};
+use super::{entity, membership_entity, planner_item_entity};
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
@@ -124,4 +124,45 @@ pub struct CreateEventRequest {
     pub timezone: String,
     pub starts_at: String,
     pub ends_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PlannerItem {
+    pub id: String,
+    pub event_id: String,
+    pub title: String,
+    pub notes: String,
+    pub position: i32,
+    pub done: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<planner_item_entity::Model> for PlannerItem {
+    fn from(model: planner_item_entity::Model) -> Self {
+        Self {
+            id: model.id,
+            event_id: model.event_id,
+            title: model.title,
+            notes: model.notes,
+            position: model.position,
+            done: model.done,
+            created_at: model.created_at,
+            updated_at: model.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CreatePlannerItemRequest {
+    pub title: String,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct UpdatePlannerItemRequest {
+    pub title: Option<String>,
+    pub notes: Option<String>,
+    pub position: Option<i32>,
+    pub done: Option<bool>,
 }

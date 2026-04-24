@@ -1,6 +1,8 @@
 use super::{
     entity, membership_entity,
-    models::{CreateEventRequest, Event},
+    models::{
+        CreateEventRequest, CreatePlannerItemRequest, Event, PlannerItem, UpdatePlannerItemRequest,
+    },
     repository::EventRepository,
 };
 use crate::error::AppError;
@@ -136,6 +138,58 @@ impl EventService {
         Ok(Event::from_parts(updated, membership_entity::Role::Owner))
     }
 
+    pub async fn get_planner_items_for_user(
+        &self,
+        event_id: &str,
+        user_id: &str,
+    ) -> Result<Vec<PlannerItem>, AppError> {
+        self.require_event_access(event_id, user_id).await?;
+
+        let items = self.repository.list_planner_items(event_id).await?;
+        Ok(items.into_iter().map(PlannerItem::from).collect())
+    }
+
+    pub async fn create_planner_item(
+        &self,
+        event_id: &str,
+        user_id: &str,
+        req: CreatePlannerItemRequest,
+    ) -> Result<PlannerItem, AppError> {
+        self.require_event_access(event_id, user_id).await?;
+        self.validate_create_planner_item_request(&req)?;
+
+        let item = self.repository.create_planner_item(event_id, req).await?;
+        Ok(item.into())
+    }
+
+    pub async fn update_planner_item(
+        &self,
+        event_id: &str,
+        item_id: &str,
+        user_id: &str,
+        req: UpdatePlannerItemRequest,
+    ) -> Result<PlannerItem, AppError> {
+        self.require_event_access(event_id, user_id).await?;
+        self.validate_update_planner_item_request(&req)?;
+
+        let item = self
+            .repository
+            .update_planner_item(event_id, item_id, req)
+            .await?;
+
+        Ok(item.into())
+    }
+
+    pub async fn delete_planner_item(
+        &self,
+        event_id: &str,
+        item_id: &str,
+        user_id: &str,
+    ) -> Result<(), AppError> {
+        self.require_event_access(event_id, user_id).await?;
+        self.repository.delete_planner_item(event_id, item_id).await
+    }
+
     fn validate_create_request(&self, req: &CreateEventRequest) -> Result<(), AppError> {
         if req.name.trim().is_empty() {
             return Err(AppError::BadRequest("Event name is required".to_string()));
@@ -176,12 +230,67 @@ impl EventService {
         Ok(())
     }
 
+    fn validate_create_planner_item_request(
+        &self,
+        req: &CreatePlannerItemRequest,
+    ) -> Result<(), AppError> {
+        if req.title.trim().is_empty() {
+            return Err(AppError::BadRequest(
+                "Planner item title is required".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn validate_update_planner_item_request(
+        &self,
+        req: &UpdatePlannerItemRequest,
+    ) -> Result<(), AppError> {
+        if req.title.is_none()
+            && req.notes.is_none()
+            && req.position.is_none()
+            && req.done.is_none()
+        {
+            return Err(AppError::BadRequest(
+                "At least one field must be provided".to_string(),
+            ));
+        }
+
+        if let Some(title) = &req.title {
+            if title.trim().is_empty() {
+                return Err(AppError::BadRequest(
+                    "Planner item title cannot be empty".to_string(),
+                ));
+            }
+        }
+
+        if let Some(position) = req.position {
+            if position < 0 {
+                return Err(AppError::BadRequest(
+                    "Planner item position cannot be negative".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
     async fn require_owner(&self, event_id: &str, user_id: &str) -> Result<(), AppError> {
         let membership = self.repository.find_membership(event_id, user_id).await?;
 
         match membership {
             Some(membership) if membership.role == membership_entity::Role::Owner => Ok(()),
             Some(_) => Err(AppError::Forbidden),
+            None => Err(AppError::NotFound("Event not found".to_string())),
+        }
+    }
+
+    async fn require_event_access(&self, event_id: &str, user_id: &str) -> Result<(), AppError> {
+        let membership = self.repository.find_membership(event_id, user_id).await?;
+
+        match membership {
+            Some(_) => Ok(()),
             None => Err(AppError::NotFound("Event not found".to_string())),
         }
     }

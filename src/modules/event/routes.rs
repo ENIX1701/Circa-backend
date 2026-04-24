@@ -5,7 +5,10 @@ use actix_web_httpauth::middleware::HttpAuthentication;
 use crate::{
     auth::{middleware::jwt_validator, models::Claims},
     error::AppError,
-    event::{models::CreateEventRequest, service::EventService},
+    event::{
+        models::{CreateEventRequest, CreatePlannerItemRequest, UpdatePlannerItemRequest},
+        service::EventService,
+    },
 };
 
 pub fn config(cfg: &mut web::ServiceConfig) {
@@ -26,6 +29,16 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .route(
                 "/{id}/cancel-destruction",
                 web::post().to(cancel_destruction),
+            )
+            .route("/{id}/planner-items", web::get().to(get_planner_items))
+            .route("/{id}/planner-items", web::post().to(create_planner_item))
+            .route(
+                "/{id}/planner-items/{item_id}",
+                web::patch().to(update_planner_item),
+            )
+            .route(
+                "/{id}/planner-items/{item_id}",
+                web::delete().to(delete_planner_item),
             ),
     );
 }
@@ -140,4 +153,82 @@ async fn cancel_destruction(
         .cancel_destruction(&path.into_inner(), &claims.sub)
         .await?;
     Ok(HttpResponse::Ok().json(event))
+}
+
+async fn get_planner_items(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let items = service
+        .get_planner_items_for_user(&path.into_inner(), &claims.sub)
+        .await?;
+
+    Ok(HttpResponse::Ok().json(items))
+}
+
+async fn create_planner_item(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<String>,
+    body: web::Json<CreatePlannerItemRequest>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let item = service
+        .create_planner_item(&path.into_inner(), &claims.sub, body.into_inner())
+        .await?;
+
+    Ok(HttpResponse::Ok().json(item))
+}
+
+async fn update_planner_item(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<(String, String)>,
+    body: web::Json<UpdatePlannerItemRequest>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let (event_id, item_id) = path.into_inner();
+
+    let item = service
+        .update_planner_item(&event_id, &item_id, &claims.sub, body.into_inner())
+        .await?;
+
+    Ok(HttpResponse::Ok().json(item))
+}
+
+async fn delete_planner_item(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<(String, String)>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let (event_id, item_id) = path.into_inner();
+
+    service
+        .delete_planner_item(&event_id, &item_id, &claims.sub)
+        .await?;
+
+    Ok(HttpResponse::NoContent().finish())
 }
