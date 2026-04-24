@@ -48,7 +48,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .route(
                 "/{id}/planner-items/{item_id}",
                 web::delete().to(delete_planner_item),
-            ),
+            )
+            .route("/{id}/archive", web::post().to(archive_event))
+            .route("/{id}/export", web::get().to(export_event)),
     );
 }
 
@@ -349,4 +351,36 @@ async fn delete_planner_item(
         .await?;
 
     Ok(HttpResponse::NoContent().finish())
+}
+
+async fn archive_event(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let event = service.archive_event(&path.into_inner(), &claims.sub).await?;
+
+    Ok(HttpResponse::Ok().json(event))
+}
+
+async fn export_event(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let export = service.export_event(&path.into_inner(), &claims.sub).await?;
+
+    Ok(HttpResponse::Ok().json(export))
 }

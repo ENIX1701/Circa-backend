@@ -274,3 +274,12 @@ pub struct UpdateSocialMediaPostRequest {
     pub status: Option<String>,
     pub position: Option<i32>,
 }
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct EventExport {
+    pub exported_at: String,
+    pub event: Event,
+    pub branding: EventBranding,
+    pub planner_items: Vec<PlannerItem>,
+    pub social_posts: Vec<SocialPost>,
+}

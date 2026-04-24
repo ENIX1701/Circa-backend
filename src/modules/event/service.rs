@@ -3,7 +3,7 @@ use super::{
     models::{
         CreateEventRequest, CreatePlannerItemRequest, CreateSocialMediaPostRequest, Event,
         EventBranding, PlannerItem, SocialPost, UpdatePlannerItemRequest,
-        UpdateSocialMediaPostRequest, UpsertEventBrandingRequest,
+        UpdateSocialMediaPostRequest, UpsertEventBrandingRequest, EventExport, 
     },
     repository::EventRepository,
 };
@@ -138,6 +138,34 @@ impl EventService {
             .await?;
 
         Ok(Event::from_parts(updated, membership_entity::Role::Owner))
+    }
+
+    pub async fn archive_event(&self, event_id: &str, user_id: &str) -> Result<Event, AppError> {
+        self.require_owner(event_id, user_id).await?;
+
+        let current = self.get_event_for_user(event_id, user_id).await?;
+        if !matches!(current.status, super::models::EventStatus::Closed | super::models::EventStatus::PendingDestruction) {
+            return Err(AppError::BadRequest("Only closed or pending destruction events can be archived :c".to_string()));
+        }
+
+        let updated = self.repository.update_status(event_id, entity::Status::Archived, None).await?;
+
+        Ok(Event::from_parts(updated, membership_entity::Role::Owner))
+    }
+
+    pub async fn export_event(&self, event_id: &str, user_id: &str) -> Result<EventExport, AppError> {
+        let event = self.get_event_for_user(event_id, user_id).await?;
+        let branding = self.get_event_branding_for_user(event_id, user_id).await?;
+        let planner_items = self.get_planner_items_for_user(event_id, user_id).await?;
+        let social_posts = self.get_social_posts_for_user(event_id, user_id).await?;
+
+        Ok(EventExport {
+            exported_at: Utc::now().to_rfc3339(),
+            event,
+            branding,
+            planner_items,
+            social_posts,
+        })
     }
 
     pub async fn get_event_branding_for_user(
