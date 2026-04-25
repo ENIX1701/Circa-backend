@@ -4,9 +4,10 @@ use super::{
     membership_entity::{self, Entity as EventMembershipEntity},
     models::{
         CreateEventRequest, CreatePlannerItemRequest, CreateSocialMediaPostRequest,
-        UpdatePlannerItemRequest, UpdateSocialMediaPostRequest, UpsertEventBrandingRequest,
+        UpdatePlannerItemRequest, UpdateSocialMediaPostRequest, UpsertEventBrandingRequest, UpdatePlannerTimelineItemRequest, CreatePlannerTimelineItemRequest
     },
     planner_item_entity::{self, Entity as PlannerItemEntity},
+    planner_timeline_item_entity::{self, Entity as PlannerTimelineItemEntity},
     social_post_entity::{self, Entity as SocialPostEntity},
 };
 use crate::error::AppError;
@@ -313,6 +314,81 @@ impl EventRepository {
             .delete(&self.db)
             .await
             .map_err(|_| AppError::InternalServerError)?;
+
+        Ok(())
+    }
+
+    pub async fn list_planner_timeline_items(&self, event_id: &str) -> Result<Vec<planner_timeline_item_entity::Model>, AppError> {
+        PlannerTimelineItemEntity::find().filter(planner_timeline_item_entity::Column::EventId.eq(event_id)).order_by_asc(planner_timeline_item_entity::Column::Position).order_by_asc(planner_timeline_item_entity::Column::StartsAt).all(&self.db).await.map_err(|_| AppError::InternalServerError)
+    }
+
+    pub async fn create_planner_timeline_item(&self, event_id: &str, dto: CreatePlannerTimelineItemRequest) -> Result<planner_timeline_item_entity::Model, AppError> {
+        let now = Utc::now().to_rfc3339();
+
+        let next_position = PlannerTimelineItemEntity::find()
+            .filter(planner_timeline_item_entity::Column::EventId.eq(event_id))
+            .order_by_desc(planner_timeline_item_entity::Column::Position)
+            .one(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)?
+            .map(|post| post.position + 1)
+            .unwrap_or(0);
+
+        let timeline_item = planner_timeline_item_entity::ActiveModel {
+            id: Set(uuid::Uuid::now_v7().to_string()),
+            event_id: Set(event_id.to_string()),
+            title: Set(dto.title),
+            item_type: Set(dto.item_type),
+            starts_at: Set(dto.starts_at),
+            ends_at: Set(dto.ends_at),
+            status: Set(dto.status.unwrap_or_else(|| "planned".to_string())),
+            owner: Set(dto.owner.unwrap_or_default()),
+            notes: Set(dto.notes.unwrap_or_default()),
+            color: Set(dto.color.unwrap_or_default()),
+            position: Set(next_position),
+            created_at: Set(now.clone()),
+            updated_at: Set(now),
+        };
+
+        timeline_item.insert(&self.db).await.map_err(|_| AppError::InternalServerError)
+    }
+
+    pub async fn update_planner_timeline_item(&self, event_id: &str, item_id: &str, dto: UpdatePlannerTimelineItemRequest) -> Result<planner_timeline_item_entity::Model, AppError> {
+        let timeline_item = PlannerTimelineItemEntity::find()
+            .filter(planner_timeline_item_entity::Column::EventId.eq(event_id))
+            .filter(planner_timeline_item_entity::Column::Id.eq(item_id))
+            .one(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)?
+            .ok_or_else(|| AppError::NotFound("Planner timeline item not found".to_string()))?;
+
+        let mut active_model: planner_timeline_item_entity::ActiveModel = timeline_item.into();
+
+        if let Some(title) = dto.title { active_model.title = Set(title); }
+        if let Some(item_type) = dto.item_type { active_model.item_type = Set(item_type); }
+        if let Some(starts_at) = dto.starts_at { active_model.starts_at = Set(starts_at); }
+        if let Some(ends_at) = dto.ends_at { active_model.ends_at = Set(ends_at); }
+        if let Some(status) = dto.status { active_model.status = Set(status); }
+        if let Some(owner) = dto.owner { active_model.owner = Set(owner); }
+        if let Some(notes) = dto.notes { active_model.notes = Set(notes); }
+        if let Some(color) = dto.color { active_model.color = Set(color); }
+        if let Some(position) = dto.position { active_model.position = Set(position); }
+
+        active_model.updated_at = Set(Utc::now().to_rfc3339());
+
+        active_model.update(&self.db).await.map_err(|_| AppError::InternalServerError)
+    }
+
+    pub async fn delete_planner_timeline_item(&self, event_id: &str, item_id: &str) -> Result<(), AppError> {
+        let timeline_item = PlannerTimelineItemEntity::find()
+            .filter(planner_timeline_item_entity::Column::EventId.eq(event_id))
+            .filter(planner_timeline_item_entity::Column::Id.eq(item_id))
+            .one(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)?
+            .ok_or_else(|| AppError::NotFound("Planner timeline item not found".to_string()))?;
+
+        timeline_item.delete(&self.db).await.map_err(|_| AppError::InternalServerError)?;
 
         Ok(())
     }

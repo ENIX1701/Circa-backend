@@ -3,7 +3,7 @@ use super::{
     models::{
         CreateEventRequest, CreatePlannerItemRequest, CreateSocialMediaPostRequest, Event,
         EventBranding, PlannerItem, SocialPost, UpdatePlannerItemRequest,
-        UpdateSocialMediaPostRequest, UpsertEventBrandingRequest, EventExport, 
+        UpdateSocialMediaPostRequest, UpsertEventBrandingRequest, EventExport,  PlannerTimelineItem, CreatePlannerTimelineItemRequest, UpdatePlannerTimelineItemRequest
     },
     repository::EventRepository,
 };
@@ -158,6 +158,7 @@ impl EventService {
         let branding = self.get_event_branding_for_user(event_id, user_id).await?;
         let planner_items = self.get_planner_items_for_user(event_id, user_id).await?;
         let social_posts = self.get_social_posts_for_user(event_id, user_id).await?;
+        let planner_timeline_items = self.get_planner_timeline_items_for_user(event_id, user_id).await?;
 
         Ok(EventExport {
             exported_at: Utc::now().to_rfc3339(),
@@ -165,6 +166,7 @@ impl EventService {
             branding,
             planner_items,
             social_posts,
+            planner_timeline_items,
         })
     }
 
@@ -253,6 +255,34 @@ impl EventService {
 
         let posts = self.repository.list_social_posts(event_id).await?;
         Ok(posts.into_iter().map(SocialPost::from).collect())
+    }
+
+    pub async fn get_planner_timeline_items_for_user(&self, event_id: &str, user_id: &str) -> Result<Vec<PlannerTimelineItem>, AppError> {
+        self.require_event_access(event_id, user_id).await?;
+
+        let items = self.repository.list_planner_timeline_items(event_id).await?;
+        Ok(items.into_iter().map(PlannerTimelineItem::from).collect())
+    }
+
+    pub async fn create_planner_timeline_item(&self, event_id: &str, user_id: &str, req: CreatePlannerTimelineItemRequest) -> Result<PlannerTimelineItem, AppError> {
+        self.require_event_access(event_id, user_id).await?;
+        self.validate_create_planner_timeline_item_request(&req)?;
+
+        let item = self.repository.create_planner_timeline_item(event_id, req).await?;
+        Ok(item.into())
+    }
+
+    pub async fn update_planner_timeline_item(&self, event_id: &str, user_id: &str, item_id: &str, req: UpdatePlannerTimelineItemRequest) -> Result<PlannerTimelineItem, AppError> {
+        self.require_event_access(event_id, user_id).await?;
+        self.validate_update_planner_timeline_item_request(&req)?;
+
+        let item = self.repository.update_planner_timeline_item(event_id, item_id, req).await?;
+        Ok(item.into())
+    }
+
+    pub async fn delete_planner_timeline_item(&self, event_id: &str, item_id: &str, user_id: &str) -> Result<(), AppError> {
+        self.require_event_access(event_id, user_id).await?;
+        self.repository.delete_planner_timeline_item(event_id, item_id).await
     }
 
     pub async fn create_social_post(
@@ -395,6 +425,80 @@ impl EventService {
         Ok(())
     }
 
+    fn validate_create_planner_timeline_item_request(&self, req: &CreatePlannerTimelineItemRequest) -> Result<(), AppError> {
+        if req.title.trim().is_empty() {
+            return Err(AppError::BadRequest("Timeline title is required".to_string()));
+        }
+
+        if !is_valid_timeline_item_type(&req.item_type) {
+            return Err(AppError::BadRequest("Timeline item type must be task, asset or milestone".to_string()));
+        }
+
+        validate_timeline_dates(&req.starts_at, &req.ends_at)?;
+
+        if let Some(status) = &req.status {
+            if !is_valid_timeline_status(status) {
+                return Err(AppError::BadRequest("Timeline status must be planned, in_progress, blocked or done".to_string()));
+            }
+        }
+
+        if let Some(color) = &req.color {
+            if !color.is_empty() && !is_valid_hex_color(color) {
+                return Err(AppError::BadRequest("timeline color must be a valid hex color".to_string()));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn validate_update_planner_timeline_item_request(&self, req: &UpdatePlannerTimelineItemRequest) -> Result<(), AppError> {
+        if req.title.is_none() && req.item_type.is_none() && req.starts_at.is_none() && req.ends_at.is_none() && req.status.is_none() && req.owner.is_none() && req.notes.is_none() && req.color.is_none() && req.position.is_none() {
+            return Err(AppError::BadRequest("At least one timeline field must be provided".to_string()));
+        }
+
+        if let Some(title) = &req.title {
+            if title.trim().is_empty() {
+                return Err(AppError::BadRequest("Timeline title cannot be empty".to_string()));
+            }
+        }
+
+        if let Some(item_type) = &req.item_type {
+            if !is_valid_timeline_item_type(item_type) {
+                return Err(AppError::BadRequest("Timeline item type must be task, asset or milestone".to_string()));
+            }
+        }
+
+        if let Some(status) = &req.status {
+            if !is_valid_timeline_status(status) {
+                return Err(AppError::BadRequest("Timeline status must planned, in_progress, block or done".to_string()));
+            }
+        }
+
+        if let Some(starts_at) = &req.starts_at {
+            DateTime::parse_from_rfc3339(starts_at).map_err(|_| {
+                AppError::BadRequest("starts_at must be a valid RFC3339 datetime".to_string())
+            })?;
+        }
+
+        if let Some(ends_at) = &req.ends_at {
+            DateTime::parse_from_rfc3339(ends_at).map_err(|_| {
+                AppError::BadRequest("ends_at must be a valid RFC3339 datetime".to_string())
+            })?;
+        }
+
+        if let (Some(starts_at), Some(ends_at)) = (&req.starts_at, &req.ends_at) {
+            validate_timeline_dates(starts_at, ends_at)?;
+        }
+
+        if let Some(color) = &req.color {
+            if !color.trim().is_empty() && !is_valid_hex_color(color) {
+                return Err(AppError::BadRequest("Timeline color must be a valid hex".to_string()));
+            }
+        }
+
+        Ok(())
+    }
+
     fn validate_create_social_post_request(
         &self,
         req: &CreateSocialMediaPostRequest,
@@ -490,4 +594,28 @@ fn is_valid_hex_color(value: &str) -> bool {
 
 fn is_valid_social_post_status(value: &str) -> bool {
     matches!(value, "draft" | "ready" | "posted")
+}
+
+fn validate_timeline_dates(starts_at: &str, ends_at: &str) -> Result<(), AppError> {
+    let starts_at = DateTime::parse_from_rfc3339(starts_at).map_err(|_| {
+        AppError::BadRequest("start_at must be a valid RFC3339 datetime".to_string())
+    })?;
+    
+    let ends_at = DateTime::parse_from_rfc3339(ends_at).map_err(|_| {
+        AppError::BadRequest("ends_at must be a valid RFC3339 datetime".to_string())
+    })?;
+
+    if starts_at > ends_at {
+        return Err(AppError::BadRequest("ends_at must be the same as or later than starts_at".to_string()));
+    }
+
+    Ok(())
+}
+
+fn is_valid_timeline_item_type(value: &str) -> bool {
+    matches!(value, "task" | "asset" | "milestone")
+}
+
+fn is_valid_timeline_status(value: &str) -> bool {
+    matches!(value, "planned" | "in_progress" | "blocked" | "done")
 }

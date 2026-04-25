@@ -1,5 +1,5 @@
 use super::{
-    entity, event_branding_entity, membership_entity, planner_item_entity, social_post_entity,
+    entity, event_branding_entity, membership_entity, planner_item_entity, social_post_entity, planner_timeline_item_entity,
 };
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
@@ -170,6 +170,68 @@ pub struct UpdatePlannerItemRequest {
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct PlannerTimelineItem {
+    pub id: String,
+    pub event_id: String,
+    pub title: String,
+    pub item_type: String,
+    pub starts_at: String,
+    pub ends_at: String,
+    pub status: String,
+    pub owner: String,
+    pub notes: String,
+    pub color: String,
+    pub position: i32,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl From<planner_timeline_item_entity::Model> for PlannerTimelineItem {
+    fn from(model: planner_timeline_item_entity::Model) -> Self {
+        Self {
+            id: model.id,
+            event_id: model.event_id,
+            title: model.title,
+            item_type: model.item_type,
+            starts_at: model.starts_at,
+            ends_at: model.ends_at,
+            status: model.status,
+            owner: model.owner,
+            notes: model.notes,
+            color: model.color,
+            position: model.position,
+            created_at: model.created_at,
+            updated_at: model.updated_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct CreatePlannerTimelineItemRequest {
+    pub title: String,
+    pub item_type: String,
+    pub starts_at: String,
+    pub ends_at: String,
+    pub status: Option<String>,
+    pub owner: Option<String>,
+    pub notes: Option<String>,
+    pub color: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct UpdatePlannerTimelineItemRequest {
+    pub title: Option<String>,
+    pub item_type: Option<String>,
+    pub starts_at: Option<String>,
+    pub ends_at: Option<String>,
+    pub status: Option<String>,
+    pub owner: Option<String>,
+    pub notes: Option<String>,
+    pub color: Option<String>,
+    pub position: Option<i32>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct EventBranding {
     pub id: Option<String>,
     pub event_id: String,
@@ -282,4 +344,5 @@ pub struct EventExport {
     pub branding: EventBranding,
     pub planner_items: Vec<PlannerItem>,
     pub social_posts: Vec<SocialPost>,
+    pub planner_timeline_items: Vec<PlannerTimelineItem>,
 }

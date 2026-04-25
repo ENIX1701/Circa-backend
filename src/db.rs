@@ -103,6 +103,35 @@ async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
 
         db.execute_unprepared(
             r#"
+            CREATE TABLE IF NOT EXISTS planner_timeline_items (
+                id TEXT PRIMARY KEY NOT NULL,
+                event_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                item_type TEXT NOT NULL,
+                starts_at TEXT NOT NULL,
+                ends_at TEXT NOT NULL,
+                status TEXT NOT NULL,
+                owner TEXT NOT NULL DEFAULT '',
+                notes TEXT NOT NULL DEFAULT '',
+                color TEXT NOT NULL DEFAULT '',
+                position INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            "#
+        )
+        .await?;
+
+        db.execute_unprepared(
+            r#"
+            CREATE INDEX IF NOT EXISTS idx_planner_timeline_items_event_id_position
+            ON planner_timeline_items (event_id, position);
+            "#
+        )
+        .await?;
+
+        db.execute_unprepared(
+            r#"
             CREATE TABLE IF NOT EXISTS social_posts (
                 id TEXT PRIMARY KEY NOT NULL,
                 event_id TEXT NOT NULL,

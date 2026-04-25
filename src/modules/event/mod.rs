@@ -4,6 +4,7 @@ pub mod membership_entity;
 pub mod models;
 pub mod planner_item_entity;
 pub mod social_post_entity;
+pub mod planner_timeline_item_entity;
 pub mod repository;
 pub mod routes;
 pub mod service;

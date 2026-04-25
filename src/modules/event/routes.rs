@@ -8,7 +8,7 @@ use crate::{
     event::{
         models::{
             CreateEventRequest, CreatePlannerItemRequest, CreateSocialMediaPostRequest,
-            UpdatePlannerItemRequest, UpdateSocialMediaPostRequest, UpsertEventBrandingRequest,
+            UpdatePlannerItemRequest, UpdateSocialMediaPostRequest, UpsertEventBrandingRequest, CreatePlannerTimelineItemRequest, UpdatePlannerTimelineItemRequest
         },
         service::EventService,
     },
@@ -49,6 +49,10 @@ pub fn config(cfg: &mut web::ServiceConfig) {
                 "/{id}/planner-items/{item_id}",
                 web::delete().to(delete_planner_item),
             )
+            .route("/{id}/planner-timeline-items", web::get().to(get_planner_timeline_items))
+            .route("/{id}/planner-timeline-items", web::post().to(create_planner_timeline_item))
+            .route("/{id}/planner-timeline-items/{items_id}", web::patch().to(update_planner_timeline_item))
+            .route("/{id}/planner-timeline-items/{items_id}", web::delete().to(delete_planner_timeline_item))
             .route("/{id}/archive", web::post().to(archive_event))
             .route("/{id}/export", web::get().to(export_event)),
     );
@@ -348,6 +352,84 @@ async fn delete_planner_item(
 
     service
         .delete_planner_item(&event_id, &item_id, &claims.sub)
+        .await?;
+
+    Ok(HttpResponse::NoContent().finish())
+}
+
+async fn get_planner_timeline_items(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let items = service
+        .get_planner_timeline_items_for_user(&path.into_inner(), &claims.sub)
+        .await?;
+
+    Ok(HttpResponse::Ok().json(items))
+}
+
+async fn create_planner_timeline_item(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<String>,
+    body: web::Json<CreatePlannerTimelineItemRequest>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let item = service
+        .create_planner_timeline_item(&path.into_inner(), &claims.sub, body.into_inner())
+        .await?;
+
+    Ok(HttpResponse::Ok().json(item))
+}
+
+async fn update_planner_timeline_item(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<(String, String)>,
+    body: web::Json<UpdatePlannerTimelineItemRequest>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let (event_id, item_id) = path.into_inner();
+
+    let item = service
+        .update_planner_timeline_item(&event_id, &item_id, &claims.sub, body.into_inner())
+        .await?;
+
+    Ok(HttpResponse::Ok().json(item))
+}
+
+async fn delete_planner_timeline_item(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<(String, String)>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let (event_id, item_id) = path.into_inner();
+
+    service
+        .delete_planner_timeline_item(&event_id, &item_id, &claims.sub)
         .await?;
 
     Ok(HttpResponse::NoContent().finish())
