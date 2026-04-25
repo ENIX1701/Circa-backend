@@ -272,7 +272,7 @@ impl EventService {
         Ok(item.into())
     }
 
-    pub async fn update_planner_timeline_item(&self, event_id: &str, user_id: &str, item_id: &str, req: UpdatePlannerTimelineItemRequest) -> Result<PlannerTimelineItem, AppError> {
+    pub async fn update_planner_timeline_item(&self, event_id: &str, item_id: &str, user_id: &str, req: UpdatePlannerTimelineItemRequest) -> Result<PlannerTimelineItem, AppError> {
         self.require_event_access(event_id, user_id).await?;
         self.validate_update_planner_timeline_item_request(&req)?;
 

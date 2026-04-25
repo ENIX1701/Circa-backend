@@ -116,7 +116,8 @@ async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
                 color TEXT NOT NULL DEFAULT '',
                 position INTEGER NOT NULL,
                 created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                updated_at TEXT NOT NULL,
+                depends_on_item_id TEXT NOT NULL DEFAULT ''
             );
             "#
         )

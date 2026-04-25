@@ -181,6 +181,7 @@ pub struct PlannerTimelineItem {
     pub owner: String,
     pub notes: String,
     pub color: String,
+    pub depends_on_item_id: String,
     pub position: i32,
     pub created_at: String,
     pub updated_at: String,
@@ -199,6 +200,7 @@ impl From<planner_timeline_item_entity::Model> for PlannerTimelineItem {
             owner: model.owner,
             notes: model.notes,
             color: model.color,
+            depends_on_item_id: model.depends_on_item_id,
             position: model.position,
             created_at: model.created_at,
             updated_at: model.updated_at,
@@ -216,6 +218,7 @@ pub struct CreatePlannerTimelineItemRequest {
     pub owner: Option<String>,
     pub notes: Option<String>,
     pub color: Option<String>,
+    pub depends_on_item_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -228,6 +231,7 @@ pub struct UpdatePlannerTimelineItemRequest {
     pub owner: Option<String>,
     pub notes: Option<String>,
     pub color: Option<String>,
+    pub depends_on_item_id: Option<String>,
     pub position: Option<i32>,
 }
 
