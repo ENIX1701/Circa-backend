@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS event_branding (
     tagline TEXT NOT NULL DEFAULT '',
     primary_color TEXT NOT NULL DEFAULT '',
     secondary_color TEXT NOT NULL DEFAULT '',
+    theme_mode TEXT NOT NULL DEFAULT 'dark', 
+    background_color TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -269,7 +271,7 @@ INSERT INTO event_memberships (id, event_id, user_id, role, created_at) VALUES
 
 INSERT INTO event_branding (
     id, event_id, event_name_override, tagline, primary_color, secondary_color,
-    notes, created_at, updated_at
+    theme_mode, background_color, notes, created_at, updated_at
 ) VALUES
     (
         '019c8555-7a32-7aaa-8000-000000000401',
@@ -278,6 +280,8 @@ INSERT INTO event_branding (
         'Ship the event, keep the chaos cute.',
         '#7C3AED',
         '#22D3EE',
+        'dark',
+        '#0B1020',
         'Use the purple/cyan palette for landing pages, badges, and social previews.',
         '2026-04-25T12:00:00Z',
         '2026-04-25T12:00:00Z'
@@ -289,6 +293,8 @@ INSERT INTO event_branding (
         'Wind down together after the summit.',
         '#111827',
         '#F97316',
+        'light',
+        '#FFF7ED',
         'Draft palette; revisit once venue confirms lighting.',
         '2026-04-25T12:10:00Z',
         '2026-04-25T12:10:00Z'

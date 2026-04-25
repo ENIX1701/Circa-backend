@@ -243,6 +243,8 @@ pub struct EventBranding {
     pub tagline: String,
     pub primary_color: String, // TODO: how to store this more efficiently?
     pub secondary_color: String,
+    pub theme_mode: String,
+    pub background_color: String,
     pub notes: String,
     pub created_at: Option<String>,
     pub updated_at: Option<String>,
@@ -257,6 +259,8 @@ impl EventBranding {
             tagline: model.tagline,
             primary_color: model.primary_color,
             secondary_color: model.secondary_color,
+            theme_mode: model.theme_mode,
+            background_color: model.background_color,
             notes: model.notes,
             created_at: Some(model.created_at),
             updated_at: Some(model.updated_at),
@@ -271,6 +275,8 @@ impl EventBranding {
             tagline: String::new(),
             primary_color: String::new(),
             secondary_color: String::new(),
+            theme_mode: "dark".to_string(),
+            background_color: String::new(),
             notes: String::new(),
             created_at: None,
             updated_at: None,
@@ -292,6 +298,10 @@ pub struct UpsertEventBrandingRequest {
     pub primary_color: String,
     #[serde(default)]
     pub secondary_color: String,
+    #[serde(default)]
+    pub theme_mode: String,
+    #[serde(default)]
+    pub background_color: String,
     #[serde(default)]
     pub notes: String,
 }

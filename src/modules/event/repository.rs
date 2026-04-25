@@ -182,12 +182,22 @@ impl EventRepository {
     ) -> Result<event_branding_entity::Model, AppError> {
         let now = Utc::now().to_rfc3339();
 
+        let theme_mode = if dto.theme_mode.trim().is_empty() {
+            "dark".to_string()
+        } else {
+            dto.theme_mode
+        };
+
+        let background_color = dto.background_color;
+
         if let Some(existing) = self.find_event_branding(event_id).await? {
             let mut active_model: event_branding_entity::ActiveModel = existing.into();
             active_model.event_name_override = Set(dto.event_name_override);
             active_model.tagline = Set(dto.tagline);
             active_model.primary_color = Set(dto.primary_color);
             active_model.secondary_color = Set(dto.secondary_color);
+            active_model.theme_mode = Set(theme_mode);
+            active_model.background_color = Set(background_color);
             active_model.notes = Set(dto.notes);
             active_model.updated_at = Set(now);
 
@@ -203,6 +213,8 @@ impl EventRepository {
                 tagline: Set(dto.tagline),
                 primary_color: Set(dto.primary_color),
                 secondary_color: Set(dto.secondary_color),
+                theme_mode: Set(theme_mode),
+                background_color: Set(background_color),
                 notes: Set(dto.notes),
                 created_at: Set(now.clone()),
                 updated_at: Set(now),

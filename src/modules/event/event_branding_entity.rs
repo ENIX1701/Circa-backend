@@ -11,6 +11,8 @@ pub struct Model {
     pub tagline: String,
     pub primary_color: String,
     pub secondary_color: String,
+    pub theme_mode: String,
+    pub background_color: String,
     pub notes: String,
     pub created_at: String,
     pub updated_at: String,

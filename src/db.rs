@@ -69,6 +69,8 @@ async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
                 tagline TEXT NOT NULL DEFAULT '',
                 primary_color TEXT NOT NULL DEFAULT '',
                 secondary_color TEXT NOT NULL DEFAULT '',
+                theme_mode TEXT NOT NULL DEFAULT 'dark',
+                background_color TEXT NOT NULL DEFAULT '',
                 notes TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL

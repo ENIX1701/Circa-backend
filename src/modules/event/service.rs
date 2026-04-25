@@ -389,6 +389,14 @@ impl EventService {
             ));
         }
 
+        if !req.background_color.is_empty() && !is_valid_hex_color(&req.background_color) {
+            return Err(AppError::BadRequest("background_color must be a valid hex color".to_string()));
+        }
+
+        if !req.theme_mode.is_empty() && !matches!(req.theme_mode.as_str(), "dark" | "light") {
+            return Err(AppError::BadRequest("theme_mode must be dark or light".to_string()));
+        }
+
         Ok(())
     }
 
