@@ -4,13 +4,13 @@ use super::{
     membership_entity::{self, Entity as EventMembershipEntity},
     models::{
         CreateEventRequest, CreatePlannerItemRequest, CreateSocialMediaPostRequest,
-        UpdatePlannerItemRequest, UpdateSocialMediaPostRequest, UpsertEventBrandingRequest, UpdatePlannerTimelineItemRequest, CreatePlannerTimelineItemRequest
+        UpdatePlannerItemRequest, UpdateSocialMediaPostRequest, UpsertEventBrandingRequest, UpdatePlannerTimelineItemRequest, CreatePlannerTimelineItemRequest, AddEventCollaboratorRequest, UpdateEventCollaboratorRequest
     },
     planner_item_entity::{self, Entity as PlannerItemEntity},
     planner_timeline_item_entity::{self, Entity as PlannerTimelineItemEntity},
     social_post_entity::{self, Entity as SocialPostEntity},
 };
-use crate::error::AppError;
+use crate::{error::AppError, user::entity::{self as user_entity, Entity as UserEntity}};
 use chrono::Utc;
 use sea_orm::*;
 use std::collections::HashMap;
@@ -73,6 +73,67 @@ impl EventRepository {
             .one(&self.db)
             .await
             .map_err(|_| AppError::InternalServerError)
+    }
+
+    pub async fn list_collaborators(
+        &self, event_id: &str,
+    ) -> Result<Vec<(membership_entity::Model, user_entity::Model)>, AppError> {
+        let memberships = EventMembershipEntity::find().filter(membership_entity::Column::EventId.eq(event_id)).order_by_asc(membership_entity::Column::CreatedAt).all(&self.db).await.map_err(|_| AppError::InternalServerError)?;
+
+        let user_ids: Vec<String> = memberships.iter().map(|m| m.user_id.clone()).collect();
+
+        if user_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let users = UserEntity::find().filter(user_entity::Column::Id.is_in(user_ids)).all(&self.db).await.map_err(|_| AppError::InternalServerError)?;
+
+        let users_by_id: HashMap<String, user_entity::Model> = users.into_iter().map(|user| (user.id.clone(), user)).collect();
+
+        Ok(memberships.into_iter().filter_map(|membership| {
+            users_by_id.get(&membership.user_id).cloned().map(|user| (membership, user))
+        }).collect())
+    }
+
+    pub async fn find_user_by_email(&self, email: &str) -> Result<Option<user_entity::Model>, AppError> {
+        UserEntity::find().filter(user_entity::Column::Email.eq(email)).one(&self.db).await.map_err(|_| AppError::InternalServerError)
+    }
+
+    pub async fn find_user_by_id(&self, user_id: &str) -> Result<Option<user_entity::Model>, AppError> {
+        UserEntity::find_by_id(user_id.to_string()).one(&self.db).await.map_err(|_| AppError::InternalServerError)
+    }
+
+    pub async fn add_membership(&self, event_id: &str, user_id: &str, role: membership_entity::Role) -> Result<membership_entity::Model, AppError> {
+        let membership = membership_entity::ActiveModel {
+            id: Set(uuid::Uuid::now_v7().to_string()),
+            event_id: Set(event_id.to_string()),
+            user_id: Set(user_id.to_string()),
+            role: Set(role),
+            created_at: Set(Utc::now().to_rfc3339())
+        };
+
+        membership.insert(&self.db).await.map_err(|_| AppError::BadRequest("User is already a collaborator! :o".to_string()))
+    }
+
+    pub async fn update_membership_role(&self, event_id: &str, user_id: &str, role: membership_entity::Role) -> Result<membership_entity::Model, AppError> {
+        let membership = self.find_membership(event_id, user_id).await?.ok_or_else(|| AppError::NotFound("Collaborator not found :c".to_string()))?;
+
+        let mut active_model: membership_entity::ActiveModel = membership.into();
+        active_model.role = Set(role);
+
+        active_model.update(&self.db).await.map_err(|_| AppError::InternalServerError)
+    }
+
+    pub async fn delete_membership(&self, event_id: &str, user_id: &str) -> Result<(), AppError> {
+        let membership = self.find_membership(event_id, user_id).await?.ok_or_else(|| AppError::NotFound("Collaborator not found :c".to_string()))?;
+
+        membership.delete(&self.db).await.map_err(|_| AppError::InternalServerError)?;
+
+        Ok(())
+    }
+
+    pub async fn owner_count(&self, event_id: &str) -> Result<u64, AppError> {
+        EventMembershipEntity::find().filter(membership_entity::Column::EventId.eq(event_id)).filter(membership_entity::Column::Role.eq(membership_entity::Role::Owner)).count(&self.db).await.map_err(|_| AppError::InternalServerError)
     }
 
     pub async fn find_for_user(

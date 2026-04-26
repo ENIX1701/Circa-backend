@@ -3,6 +3,7 @@ use super::{
 };
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
+use crate::user::entity as user_entity;
 
 #[derive(Debug, Serialize, Deserialize, Display, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]
@@ -115,6 +116,43 @@ impl Event {
             updated_at: model.updated_at,
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EventCollaborator {
+    pub user_id: String,
+    pub name: String,
+    pub surname: String,
+    pub email: String,
+    pub phone: String,
+    pub role: EventMembershipRole,
+    pub created_at: String,
+}
+
+impl EventCollaborator {
+    pub fn from_parts(membership: membership_entity::Model, user: user_entity::Model) -> Self {
+        Self {
+            user_id: user.id,
+            name: user.name,
+            surname: user.surname,
+            email: user.email,
+            phone: user.phone,
+            role: membership.role.into(),
+            created_at: membership.created_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct AddEventCollaboratorRequest {
+    pub email: String,
+    pub role: EventMembershipRole,
+}
+
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct UpdateEventCollaboratorRequest {
+    pub role: EventMembershipRole,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

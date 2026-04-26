@@ -3,7 +3,7 @@ use super::{
     models::{
         CreateEventRequest, CreatePlannerItemRequest, CreateSocialMediaPostRequest, Event,
         EventBranding, PlannerItem, SocialPost, UpdatePlannerItemRequest,
-        UpdateSocialMediaPostRequest, UpsertEventBrandingRequest, EventExport,  PlannerTimelineItem, CreatePlannerTimelineItemRequest, UpdatePlannerTimelineItemRequest
+        UpdateSocialMediaPostRequest, UpsertEventBrandingRequest, EventExport,  PlannerTimelineItem, CreatePlannerTimelineItemRequest, UpdatePlannerTimelineItemRequest, AddEventCollaboratorRequest, UpdateEventCollaboratorRequest, EventCollaborator
     },
     repository::EventRepository,
 };
@@ -170,6 +170,66 @@ impl EventService {
         })
     }
 
+    pub async fn get_event_collaborators_for_user(&self, event_id: &str, user_id: &str) -> Result<Vec<EventCollaborator>, AppError> {
+        self.require_event_access(event_id, user_id).await?;
+
+        let collaborators = self.repository.list_collaborators(event_id).await?;
+
+        Ok(collaborators.into_iter().map(|(membership, user)| EventCollaborator::from_parts(membership, user)).collect())
+    }
+
+    pub async fn add_event_collaborator(&self, event_id: &str, user_id: &str, req: AddEventCollaboratorRequest) -> Result<EventCollaborator, AppError> {
+        self.require_owner(event_id, user_id).await?;
+
+        let email = req.email.trim().to_lowercase();
+
+        if email.is_empty() {
+            return Err(AppError::BadRequest("Email is required :c".to_string()));
+        }
+
+        let user = self.repository.find_user_by_email(&email).await?.ok_or_else(|| AppError::NotFound("User not found QwQ".to_string()))?;
+
+        let membership = self.repository.add_membership(event_id, &user.id, req.role.into()).await?;
+
+        Ok(EventCollaborator::from_parts(membership, user))
+    }
+
+    pub async fn update_event_collaborator(&self, event_id: &str, target_user_id: &str, actor_user_id: &str, req: UpdateEventCollaboratorRequest) -> Result<EventCollaborator, AppError> {
+        self.require_owner(event_id, actor_user_id).await?;
+
+        if target_user_id == actor_user_id {
+            return Err(AppError::BadRequest("You cannot change your own event role :c".to_string()));
+        }
+
+        let current_membership = self.repository.find_membership(event_id, target_user_id).await?.ok_or_else(|| AppError::NotFound("Collaborator not found".to_string()))?;
+
+        if current_membership.role == membership_entity::Role::Owner && self.repository.owner_count(event_id).await? <= 1 {
+            return Err(AppError::BadRequest("Each event must have at least one owner!!".to_string()));
+        }
+
+        let membership = self.repository.update_membership_role(event_id, target_user_id, req.role.into()).await?;
+
+        let user = self.repository.find_user_by_id(target_user_id).await?.ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+
+        Ok(EventCollaborator::from_parts(membership, user))
+    }
+
+    pub async fn delete_event_collaborator(&self, event_id: &str, target_user_id: &str, actor_user_id: &str) -> Result<(), AppError> {
+        self.require_owner(event_id, actor_user_id).await?;
+
+        if target_user_id == actor_user_id {
+            return Err(AppError::BadRequest("You cannot remove yourself from the event >:C".to_string()));
+        }
+
+        let membership = self.repository.find_membership(event_id, target_user_id).await?.ok_or_else(|| AppError::NotFound("Collaborator not found".to_string()))?;
+
+        if membership.role == membership_entity::Role::Owner && self.repository.owner_count(event_id).await? <= 1 {
+            return Err(AppError::BadRequest("Each event must have at least one owner!!".to_string()));
+        }
+
+        self.repository.delete_membership(event_id, target_user_id).await
+    }
+
     pub async fn get_event_branding_for_user(
         &self,
         event_id: &str,
@@ -191,7 +251,7 @@ impl EventService {
         user_id: &str,
         req: UpsertEventBrandingRequest,
     ) -> Result<EventBranding, AppError> {
-        self.require_event_access(event_id, user_id).await?;
+        self.require_event_manager(event_id, user_id).await?;
         self.validate_upsert_event_branding_request(&req)?;
 
         let branding = self.repository.upsert_event_branding(event_id, req).await?;
@@ -215,7 +275,7 @@ impl EventService {
         user_id: &str,
         req: CreatePlannerItemRequest,
     ) -> Result<PlannerItem, AppError> {
-        self.require_event_access(event_id, user_id).await?;
+        self.require_content_manager(event_id, user_id).await?;
         self.validate_create_planner_item_request(&req)?;
 
         let item = self.repository.create_planner_item(event_id, req).await?;
@@ -229,7 +289,7 @@ impl EventService {
         user_id: &str,
         req: UpdatePlannerItemRequest,
     ) -> Result<PlannerItem, AppError> {
-        self.require_event_access(event_id, user_id).await?;
+        self.require_content_manager(event_id, user_id).await?;
         self.validate_update_planner_item_request(&req)?;
 
         let item = self
@@ -246,7 +306,7 @@ impl EventService {
         item_id: &str,
         user_id: &str,
     ) -> Result<(), AppError> {
-        self.require_event_access(event_id, user_id).await?;
+        self.require_content_manager(event_id, user_id).await?;
         self.repository.delete_planner_item(event_id, item_id).await
     }
 
@@ -265,7 +325,7 @@ impl EventService {
     }
 
     pub async fn create_planner_timeline_item(&self, event_id: &str, user_id: &str, req: CreatePlannerTimelineItemRequest) -> Result<PlannerTimelineItem, AppError> {
-        self.require_event_access(event_id, user_id).await?;
+        self.require_content_manager(event_id, user_id).await?;
         self.validate_create_planner_timeline_item_request(&req)?;
 
         let item = self.repository.create_planner_timeline_item(event_id, req).await?;
@@ -273,7 +333,7 @@ impl EventService {
     }
 
     pub async fn update_planner_timeline_item(&self, event_id: &str, item_id: &str, user_id: &str, req: UpdatePlannerTimelineItemRequest) -> Result<PlannerTimelineItem, AppError> {
-        self.require_event_access(event_id, user_id).await?;
+        self.require_content_manager(event_id, user_id).await?;
         self.validate_update_planner_timeline_item_request(&req)?;
 
         let item = self.repository.update_planner_timeline_item(event_id, item_id, req).await?;
@@ -281,7 +341,7 @@ impl EventService {
     }
 
     pub async fn delete_planner_timeline_item(&self, event_id: &str, item_id: &str, user_id: &str) -> Result<(), AppError> {
-        self.require_event_access(event_id, user_id).await?;
+        self.require_content_manager(event_id, user_id).await?;
         self.repository.delete_planner_timeline_item(event_id, item_id).await
     }
 
@@ -291,7 +351,7 @@ impl EventService {
         user_id: &str,
         req: CreateSocialMediaPostRequest,
     ) -> Result<SocialPost, AppError> {
-        self.require_event_access(event_id, user_id).await?;
+        self.require_content_manager(event_id, user_id).await?;
         self.validate_create_social_post_request(&req)?;
 
         let post = self.repository.create_social_post(event_id, req).await?;
@@ -305,7 +365,7 @@ impl EventService {
         user_id: &str,
         req: UpdateSocialMediaPostRequest,
     ) -> Result<SocialPost, AppError> {
-        self.require_event_access(event_id, user_id).await?;
+        self.require_content_manager(event_id, user_id).await?;
         self.validate_update_social_post_request(&req)?;
 
         let post = self.repository.update_social_post(event_id, post_id, req).await?;
@@ -316,7 +376,7 @@ impl EventService {
     pub async fn delete_social_post(
         &self, event_id: &str, post_id: &str, user_id: &str
     ) -> Result<(), AppError> {
-        self.require_event_access(event_id, user_id).await?;
+        self.require_content_manager(event_id, user_id).await?;
         self.repository.delete_social_post(event_id, post_id).await
     }
 
@@ -575,6 +635,32 @@ impl EventService {
             Some(membership) if membership.role == membership_entity::Role::Owner => Ok(()),
             Some(_) => Err(AppError::Forbidden),
             None => Err(AppError::NotFound("Event not found".to_string())),
+        }
+    }
+
+    async fn require_event_manager(&self, event_id: &str, user_id: &str) -> Result<(), AppError> {
+        let membership = self.repository.find_membership(event_id, user_id).await?;
+
+        match membership {
+            Some(membership)
+                if matches!(membership.role, membership_entity::Role::Owner | membership_entity::Role::Organizer) => {
+                    Ok(())
+                }
+            Some(_) => Err(AppError::Forbidden),
+            None => Err(AppError::NotFound("Event not found".to_string()))
+        }
+    }
+
+    async fn require_content_manager(&self, event_id: &str, user_id: &str) -> Result<(), AppError> {
+        let membership = self.repository.find_membership(event_id, user_id).await?;
+
+        match membership {
+            Some(membership)
+                if matches!(membership.role, membership_entity::Role::Owner | membership_entity::Role::Organizer | membership_entity::Role::Staff) => {
+                    Ok(())
+                }
+            Some(_) => Err(AppError::Forbidden),
+            None => Err(AppError::NotFound("Event not found".to_string()))
         }
     }
 
