@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS event_branding (
     tagline TEXT NOT NULL DEFAULT '',
     primary_color TEXT NOT NULL DEFAULT '',
     secondary_color TEXT NOT NULL DEFAULT '',
-    theme_mode TEXT NOT NULL DEFAULT 'dark', 
+    theme_mode TEXT NOT NULL DEFAULT 'dark',
     background_color TEXT NOT NULL DEFAULT '',
     notes TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
@@ -104,7 +104,8 @@ CREATE TABLE IF NOT EXISTS planner_timeline_items (
     position INTEGER NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    depends_on_item_id TEXT NOT NULL DEFAULT ''
+    depends_on_item_id TEXT NOT NULL DEFAULT '',
+    assigned_user_id TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_planner_timeline_items_event_id_position
@@ -308,18 +309,18 @@ INSERT INTO planner_items (id, event_id, title, notes, position, done, created_a
 
 INSERT INTO planner_timeline_items (
     id, event_id, title, item_type, starts_at, ends_at, status, owner,
-    notes, color, position, created_at, updated_at, depends_on_item_id
+    notes, color, position, created_at, updated_at, depends_on_item_id, assigned_user_id
 ) VALUES
-    ('019c8555-7a32-7aaa-8000-000000000601', '019c8555-7a32-7aaa-8000-000000000100', 'Venue load-in', 'logistics', '2026-06-12T07:00:00+02:00', '2026-06-12T08:30:00+02:00', 'scheduled', 'Cara Curie', 'AV, signage, and registration desks arrive through Gate B.', '#22D3EE', 1, '2026-04-25T12:00:00Z', '2026-04-25T12:00:00Z', ''),
-    ('019c8555-7a32-7aaa-8000-000000000602', '019c8555-7a32-7aaa-8000-000000000100', 'Doors open and check-in', 'staffing', '2026-06-12T08:30:00+02:00', '2026-06-12T10:00:00+02:00', 'ready', 'Dani Day', 'Volunteer check-in team needs badge scanners and printed fallback list.', '#7C3AED', 2, '2026-04-25T12:00:00Z', '2026-04-25T12:00:00Z', '019c8555-7a32-7aaa-8000-000000000601'),
-    ('019c8555-7a32-7aaa-8000-000000000603', '019c8555-7a32-7aaa-8000-000000000100', 'Opening keynote', 'program', '2026-06-12T10:00:00+02:00', '2026-06-12T10:45:00+02:00', 'blocked', 'Alice Lovelace', 'Waiting on final speaker deck.', '#F97316', 3, '2026-04-25T12:00:00Z', '2026-04-25T12:00:00Z', '019c8555-7a32-7aaa-8000-000000000602'),
-    ('019c8555-7a32-7aaa-8000-000000000604', '019c8555-7a32-7aaa-8000-000000000100', 'Day-one wrap and handoff', 'operations', '2026-06-12T17:30:00+02:00', '2026-06-12T18:00:00+02:00', 'draft', 'Bob Birkenstock', 'Collect unresolved issues for day-two standup.', '#10B981', 4, '2026-04-25T12:00:00Z', '2026-04-25T12:00:00Z', ''),
-    ('019c8555-7a32-7aaa-8000-000000000605', '019c8555-7a32-7aaa-8000-000000000101', 'Afterparty doors open', 'social', '2026-06-14T20:00:00+02:00', '2026-06-14T21:00:00+02:00', 'draft', 'Bob Birkenstock', 'Depends on summit teardown plan.', '#F97316', 1, '2026-04-25T12:10:00Z', '2026-04-25T12:10:00Z', '');
+    ('019c8555-7a32-7aaa-8000-000000000601', '019c8555-7a32-7aaa-8000-000000000100', 'Venue load-in', 'task', '2026-06-12T07:00:00+02:00', '2026-06-12T08:30:00+02:00', 'in_progress', 'Cara Curie', 'AV, signage, and registration desks arrive through Gate B.', '#22D3EE', 1, '2026-04-25T12:00:00Z', '2026-04-25T12:00:00Z', '', '019c8555-7a32-7aaa-8000-000000000003'),
+    ('019c8555-7a32-7aaa-8000-000000000602', '019c8555-7a32-7aaa-8000-000000000100', 'Doors open and check-in', 'task', '2026-06-12T08:30:00+02:00', '2026-06-12T10:00:00+02:00', 'planned', 'Dani Day', 'Volunteer check-in team needs badge scanners and printed fallback list.', '#7C3AED', 2, '2026-04-25T12:00:00Z', '2026-04-25T12:00:00Z', '019c8555-7a32-7aaa-8000-000000000601', '019c8555-7a32-7aaa-8000-000000000004'),
+    ('019c8555-7a32-7aaa-8000-000000000603', '019c8555-7a32-7aaa-8000-000000000100', 'Opening keynote', 'milestone', '2026-06-12T10:00:00+02:00', '2026-06-12T10:45:00+02:00', 'blocked', 'Alice Lovelace', 'Waiting on final speaker deck.', '#F97316', 3, '2026-04-25T12:00:00Z', '2026-04-25T12:00:00Z', '019c8555-7a32-7aaa-8000-000000000602', '019c8555-7a32-719a-bbfc-289d208c2996'),
+    ('019c8555-7a32-7aaa-8000-000000000604', '019c8555-7a32-7aaa-8000-000000000100', 'Day-one wrap and handoff', 'task', '2026-06-12T17:30:00+02:00', '2026-06-12T18:00:00+02:00', 'planned', 'Bob Birkenstock', 'Collect unresolved issues for day-two standup.', '#10B981', 4, '2026-04-25T12:00:00Z', '2026-04-25T12:00:00Z', '', '019c8555-7a32-7972-8961-f2c2b29ebd22'),
+    ('019c8555-7a32-7aaa-8000-000000000605', '019c8555-7a32-7aaa-8000-000000000101', 'Afterparty doors open', 'task', '2026-06-14T20:00:00+02:00', '2026-06-14T21:00:00+02:00', 'planned', 'Bob Birkenstock', 'Depends on summit teardown plan.', '#F97316', 1, '2026-04-25T12:10:00Z', '2026-04-25T12:10:00Z', '', '019c8555-7a32-7972-8961-f2c2b29ebd22');
 
 INSERT INTO social_posts (id, event_id, platform, title, body, status, position, created_at, updated_at) VALUES
     ('019c8555-7a32-7aaa-8000-000000000701', '019c8555-7a32-7aaa-8000-000000000100', 'x', 'Speaker lineup teaser', 'First wave of speakers is nearly here. Follow Circa Demo Summit for schedule drops this week.', 'draft', 1, '2026-04-25T12:00:00Z', '2026-04-25T12:00:00Z'),
-    ('019c8555-7a32-7aaa-8000-000000000702', '019c8555-7a32-7aaa-8000-000000000100', 'linkedin', 'Volunteer call', 'We are opening a few more volunteer slots for registration, wayfinding, and speaker support.', 'scheduled', 2, '2026-04-25T12:00:00Z', '2026-04-25T12:00:00Z'),
-    ('019c8555-7a32-7aaa-8000-000000000703', '019c8555-7a32-7aaa-8000-000000000100', 'instagram', 'Behind the scenes', 'A peek at the venue build, badge wall, and stage tests before doors open.', 'published', 3, '2026-04-25T12:00:00Z', '2026-04-25T12:00:00Z'),
+    ('019c8555-7a32-7aaa-8000-000000000702', '019c8555-7a32-7aaa-8000-000000000100', 'linkedin', 'Volunteer call', 'We are opening a few more volunteer slots for registration, wayfinding, and speaker support.', 'ready', 2, '2026-04-25T12:00:00Z', '2026-04-25T12:00:00Z'),
+    ('019c8555-7a32-7aaa-8000-000000000703', '019c8555-7a32-7aaa-8000-000000000100', 'instagram', 'Behind the scenes', 'A peek at the venue build, badge wall, and stage tests before doors open.', 'posted', 3, '2026-04-25T12:00:00Z', '2026-04-25T12:00:00Z'),
     ('019c8555-7a32-7aaa-8000-000000000704', '019c8555-7a32-7aaa-8000-000000000101', 'instagram', 'Afterparty save the date', 'Save the date for the Circa Afterparty. Details soon.', 'draft', 1, '2026-04-25T12:10:00Z', '2026-04-25T12:10:00Z');
 
 COMMIT;

@@ -422,6 +422,7 @@ impl EventRepository {
             created_at: Set(now.clone()),
             updated_at: Set(now),
             depends_on_item_id: Set(dto.depends_on_item_id.unwrap_or_default()),
+            assigned_user_id: Set(dto.assigned_user_id.unwrap_or_default()),
         };
 
         timeline_item.insert(&self.db).await.map_err(|_| AppError::InternalServerError)
@@ -448,6 +449,7 @@ impl EventRepository {
         if let Some(color) = dto.color { active_model.color = Set(color); }
         if let Some(position) = dto.position { active_model.position = Set(position); }
         if let Some(depends_on_item_id) = dto.depends_on_item_id { active_model.depends_on_item_id = Set(depends_on_item_id); }
+        if let Some(assigned_user_id) = dto.assigned_user_id { active_model.assigned_user_id = Set(assigned_user_id); }
 
         active_model.updated_at = Set(Utc::now().to_rfc3339());
 

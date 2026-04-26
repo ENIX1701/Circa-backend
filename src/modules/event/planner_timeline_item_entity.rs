@@ -19,6 +19,7 @@ pub struct Model {
     pub created_at: String,
     pub updated_at: String,
     pub depends_on_item_id: String,
+    pub assigned_user_id: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

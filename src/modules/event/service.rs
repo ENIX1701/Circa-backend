@@ -327,6 +327,7 @@ impl EventService {
     pub async fn create_planner_timeline_item(&self, event_id: &str, user_id: &str, req: CreatePlannerTimelineItemRequest) -> Result<PlannerTimelineItem, AppError> {
         self.require_content_manager(event_id, user_id).await?;
         self.validate_create_planner_timeline_item_request(&req)?;
+        self.validate_timeline_assignee(event_id, req.assigned_user_id.as_deref()).await?;
 
         let item = self.repository.create_planner_timeline_item(event_id, req).await?;
         Ok(item.into())
@@ -335,6 +336,7 @@ impl EventService {
     pub async fn update_planner_timeline_item(&self, event_id: &str, item_id: &str, user_id: &str, req: UpdatePlannerTimelineItemRequest) -> Result<PlannerTimelineItem, AppError> {
         self.require_content_manager(event_id, user_id).await?;
         self.validate_update_planner_timeline_item_request(&req)?;
+        self.validate_timeline_assignee(event_id, req.assigned_user_id.as_deref()).await?;
 
         let item = self.repository.update_planner_timeline_item(event_id, item_id, req).await?;
         Ok(item.into())
@@ -520,7 +522,7 @@ impl EventService {
     }
 
     fn validate_update_planner_timeline_item_request(&self, req: &UpdatePlannerTimelineItemRequest) -> Result<(), AppError> {
-        if req.title.is_none() && req.item_type.is_none() && req.starts_at.is_none() && req.ends_at.is_none() && req.status.is_none() && req.owner.is_none() && req.notes.is_none() && req.color.is_none() && req.position.is_none() {
+        if req.title.is_none() && req.item_type.is_none() && req.starts_at.is_none() && req.ends_at.is_none() && req.status.is_none() && req.owner.is_none() && req.notes.is_none() && req.color.is_none() && req.position.is_none() && req.depends_on_item_id.is_none() && req.assigned_user_id.is_none() {
             return Err(AppError::BadRequest("At least one timeline field must be provided".to_string()));
         }
 
@@ -562,6 +564,22 @@ impl EventService {
             if !color.trim().is_empty() && !is_valid_hex_color(color) {
                 return Err(AppError::BadRequest("Timeline color must be a valid hex".to_string()));
             }
+        }
+
+        Ok(())
+    }
+
+    async fn validate_timeline_assignee(&self, event_id: &str, assigned_user_id: Option<&str>) -> Result<(), AppError> {
+        let Some(assigned_user_id) = assigned_user_id else {
+            return Ok(());
+        };
+
+        if assigned_user_id.trim().is_empty() {
+            return Ok(());
+        }
+
+        if self.repository.find_membership(event_id, assigned_user_id).await?.is_none() {
+            return Err(AppError::BadRequest("assigned_user_id must belong to an event collaborator >:c".to_string()));
         }
 
         Ok(())
