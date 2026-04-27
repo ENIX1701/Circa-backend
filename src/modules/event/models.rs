@@ -1,9 +1,10 @@
 use super::{
-    entity, event_branding_entity, membership_entity, planner_item_entity, social_post_entity, planner_timeline_item_entity,
+    entity, event_branding_entity, membership_entity, planner_item_entity,
+    planner_timeline_item_entity, social_post_entity,
 };
+use crate::user::entity as user_entity;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
-use crate::user::entity as user_entity;
 
 #[derive(Debug, Serialize, Deserialize, Display, Clone, PartialEq)]
 #[serde(rename_all = "snake_case")]

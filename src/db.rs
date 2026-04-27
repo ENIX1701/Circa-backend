@@ -75,7 +75,7 @@ async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
-            "#
+            "#,
         )
         .await?;
 
@@ -91,7 +91,7 @@ async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
-            "#
+            "#,
         )
         .await?;
 
@@ -99,7 +99,7 @@ async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
             r#"
             CREATE INDEX IF NOT EXISTS idx_planner_items_event_id_position
             ON planner_items (event_id, position);
-            "#
+            "#,
         )
         .await?;
 
@@ -122,7 +122,7 @@ async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
                 depends_on_item_id TEXT NOT NULL DEFAULT '',
                 assigned_user_id TEXT NOT NULL DEFAULT ''
             );
-            "#
+            "#,
         )
         .await?;
 
@@ -130,7 +130,7 @@ async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
             r#"
             CREATE INDEX IF NOT EXISTS idx_planner_timeline_items_event_id_position
             ON planner_timeline_items (event_id, position);
-            "#
+            "#,
         )
         .await?;
 
@@ -147,7 +147,7 @@ async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
-            "#
+            "#,
         )
         .await?;
 
@@ -155,7 +155,7 @@ async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
             r#"
             CREATE INDEX IF NOT EXISTS idx_social_posts_event_id_position
             ON social_posts (event_id, position);
-            "#
+            "#,
         )
         .await?;
     }

@@ -7,8 +7,11 @@ use crate::{
     error::AppError,
     event::{
         models::{
-            CreateEventRequest, CreatePlannerItemRequest, CreateSocialMediaPostRequest,
-            UpdatePlannerItemRequest, UpdateSocialMediaPostRequest, UpsertEventBrandingRequest, CreatePlannerTimelineItemRequest, UpdatePlannerTimelineItemRequest, AddEventCollaboratorRequest, UpdateEventCollaboratorRequest
+            AddEventCollaboratorRequest, CreateEventRequest, CreatePlannerItemRequest,
+            CreatePlannerTimelineItemRequest, CreateSocialMediaPostRequest,
+            UpdateEventCollaboratorRequest, UpdatePlannerItemRequest,
+            UpdatePlannerTimelineItemRequest, UpdateSocialMediaPostRequest,
+            UpsertEventBrandingRequest,
         },
         service::EventService,
     },
@@ -37,8 +40,14 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .route("/{id}/branding", web::put().to(put_event_branding))
             .route("/{id}/social-posts", web::get().to(get_social_posts))
             .route("/{id}/social-posts", web::post().to(create_social_post))
-            .route("/{id}/social-posts/{post_id}", web::patch().to(update_social_post))
-            .route("/{id}/social-posts/{post_id}", web::delete().to(delete_social_post))
+            .route(
+                "/{id}/social-posts/{post_id}",
+                web::patch().to(update_social_post),
+            )
+            .route(
+                "/{id}/social-posts/{post_id}",
+                web::delete().to(delete_social_post),
+            )
             .route("/{id}/planner-items", web::get().to(get_planner_items))
             .route("/{id}/planner-items", web::post().to(create_planner_item))
             .route(
@@ -49,14 +58,38 @@ pub fn config(cfg: &mut web::ServiceConfig) {
                 "/{id}/planner-items/{item_id}",
                 web::delete().to(delete_planner_item),
             )
-            .route("/{id}/planner-timeline-items", web::get().to(get_planner_timeline_items))
-            .route("/{id}/planner-timeline-items", web::post().to(create_planner_timeline_item))
-            .route("/{id}/planner-timeline-items/{items_id}", web::patch().to(update_planner_timeline_item))
-            .route("/{id}/planner-timeline-items/{items_id}", web::delete().to(delete_planner_timeline_item))
-            .route("/{id}/collaborators", web::get().to(get_event_collaborators))
-            .route("/{id}/collaborators", web::post().to(create_event_collaborator))
-            .route("/{id}/collaborators/{user_id}", web::patch().to(update_event_collaborator))
-            .route("/{id}/collaborators/{user_id}", web::delete().to(delete_event_collaborator))
+            .route(
+                "/{id}/planner-timeline-items",
+                web::get().to(get_planner_timeline_items),
+            )
+            .route(
+                "/{id}/planner-timeline-items",
+                web::post().to(create_planner_timeline_item),
+            )
+            .route(
+                "/{id}/planner-timeline-items/{items_id}",
+                web::patch().to(update_planner_timeline_item),
+            )
+            .route(
+                "/{id}/planner-timeline-items/{items_id}",
+                web::delete().to(delete_planner_timeline_item),
+            )
+            .route(
+                "/{id}/collaborators",
+                web::get().to(get_event_collaborators),
+            )
+            .route(
+                "/{id}/collaborators",
+                web::post().to(create_event_collaborator),
+            )
+            .route(
+                "/{id}/collaborators/{user_id}",
+                web::patch().to(update_event_collaborator),
+            )
+            .route(
+                "/{id}/collaborators/{user_id}",
+                web::delete().to(delete_event_collaborator),
+            )
             .route("/{id}/archive", web::post().to(archive_event))
             .route("/{id}/export", web::get().to(export_event)),
     );
@@ -196,7 +229,7 @@ async fn put_event_branding(
     req: HttpRequest,
     service: web::Data<EventService>,
     path: web::Path<String>,
-    body: web::Json<UpsertEventBrandingRequest>
+    body: web::Json<UpsertEventBrandingRequest>,
 ) -> Result<HttpResponse, AppError> {
     let claims = req
         .extensions()
@@ -222,7 +255,9 @@ async fn get_social_posts(
         .cloned()
         .ok_or(AppError::Unauthorized)?;
 
-    let posts = service.get_social_posts_for_user(&path.into_inner(), &claims.sub).await?;
+    let posts = service
+        .get_social_posts_for_user(&path.into_inner(), &claims.sub)
+        .await?;
 
     Ok(HttpResponse::Ok().json(posts))
 }
@@ -239,7 +274,9 @@ async fn create_social_post(
         .cloned()
         .ok_or(AppError::Unauthorized)?;
 
-    let post = service.create_social_post(&path.into_inner(), &claims.sub, body.into_inner()).await?;
+    let post = service
+        .create_social_post(&path.into_inner(), &claims.sub, body.into_inner())
+        .await?;
 
     Ok(HttpResponse::Ok().json(post))
 }
@@ -258,7 +295,9 @@ async fn update_social_post(
 
     let (event_id, post_id) = path.into_inner();
 
-    let post = service.update_social_post(&event_id, &post_id, &claims.sub, body.into_inner()).await?;
+    let post = service
+        .update_social_post(&event_id, &post_id, &claims.sub, body.into_inner())
+        .await?;
 
     Ok(HttpResponse::Ok().json(post))
 }
@@ -439,31 +478,49 @@ async fn delete_planner_timeline_item(
     Ok(HttpResponse::NoContent().finish())
 }
 
-async fn get_event_collaborators(req: HttpRequest, service: web::Data<EventService>, path: web::Path<String>) -> Result<HttpResponse, AppError> {
+async fn get_event_collaborators(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<String>,
+) -> Result<HttpResponse, AppError> {
     let claims = req
         .extensions()
         .get::<Claims>()
         .cloned()
         .ok_or(AppError::Unauthorized)?;
 
-    let collaborators = service.get_event_collaborators_for_user(&path.into_inner(), &claims.sub).await?;
+    let collaborators = service
+        .get_event_collaborators_for_user(&path.into_inner(), &claims.sub)
+        .await?;
 
     Ok(HttpResponse::Ok().json(collaborators))
 }
 
-async fn create_event_collaborator(req: HttpRequest, service: web::Data<EventService>, path: web::Path<String>, body: web::Json<AddEventCollaboratorRequest>) -> Result<HttpResponse, AppError> {
+async fn create_event_collaborator(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<String>,
+    body: web::Json<AddEventCollaboratorRequest>,
+) -> Result<HttpResponse, AppError> {
     let claims = req
         .extensions()
         .get::<Claims>()
         .cloned()
         .ok_or(AppError::Unauthorized)?;
 
-    let collaborator = service.add_event_collaborator(&path.into_inner(), &claims.sub, body.into_inner()).await?;
+    let collaborator = service
+        .add_event_collaborator(&path.into_inner(), &claims.sub, body.into_inner())
+        .await?;
 
     Ok(HttpResponse::Ok().json(collaborator))
 }
 
-async fn update_event_collaborator(req: HttpRequest, service: web::Data<EventService>, path: web::Path<(String, String)>, body: web::Json<UpdateEventCollaboratorRequest>) -> Result<HttpResponse, AppError> {
+async fn update_event_collaborator(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<(String, String)>,
+    body: web::Json<UpdateEventCollaboratorRequest>,
+) -> Result<HttpResponse, AppError> {
     let claims = req
         .extensions()
         .get::<Claims>()
@@ -472,12 +529,18 @@ async fn update_event_collaborator(req: HttpRequest, service: web::Data<EventSer
 
     let (event_id, user_id) = path.into_inner();
 
-    let collaborator = service.update_event_collaborator(&event_id, &user_id, &claims.sub, body.into_inner()).await?;
+    let collaborator = service
+        .update_event_collaborator(&event_id, &user_id, &claims.sub, body.into_inner())
+        .await?;
 
     Ok(HttpResponse::Ok().json(collaborator))
 }
 
-async fn delete_event_collaborator(req: HttpRequest, service: web::Data<EventService>, path: web::Path<(String, String)>) -> Result<HttpResponse, AppError> {
+async fn delete_event_collaborator(
+    req: HttpRequest,
+    service: web::Data<EventService>,
+    path: web::Path<(String, String)>,
+) -> Result<HttpResponse, AppError> {
     let claims = req
         .extensions()
         .get::<Claims>()
@@ -486,7 +549,9 @@ async fn delete_event_collaborator(req: HttpRequest, service: web::Data<EventSer
 
     let (event_id, user_id) = path.into_inner();
 
-    service.delete_event_collaborator(&event_id, &user_id, &claims.sub).await?;
+    service
+        .delete_event_collaborator(&event_id, &user_id, &claims.sub)
+        .await?;
 
     Ok(HttpResponse::NoContent().finish())
 }
@@ -502,7 +567,9 @@ async fn archive_event(
         .cloned()
         .ok_or(AppError::Unauthorized)?;
 
-    let event = service.archive_event(&path.into_inner(), &claims.sub).await?;
+    let event = service
+        .archive_event(&path.into_inner(), &claims.sub)
+        .await?;
 
     Ok(HttpResponse::Ok().json(event))
 }
@@ -518,7 +585,9 @@ async fn export_event(
         .cloned()
         .ok_or(AppError::Unauthorized)?;
 
-    let export = service.export_event(&path.into_inner(), &claims.sub).await?;
+    let export = service
+        .export_event(&path.into_inner(), &claims.sub)
+        .await?;
 
     Ok(HttpResponse::Ok().json(export))
 }

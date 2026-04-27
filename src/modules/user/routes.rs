@@ -51,7 +51,7 @@ async fn update_user(
         .extensions()
         .get::<Claims>()
         .cloned()
-        .ok_or_else(|| AppError::Unauthorized)?;
+        .ok_or(AppError::Unauthorized)?;
 
     let user = service
         .update_user(&path.into_inner(), body.into_inner(), &claims)
@@ -68,7 +68,7 @@ async fn delete_user(
         .extensions()
         .get::<Claims>()
         .cloned()
-        .ok_or_else(|| AppError::Unauthorized)?;
+        .ok_or(AppError::Unauthorized)?;
 
     service.delete_user(&path.into_inner(), &claims).await?;
     Ok(HttpResponse::Ok().body("User deleted successfully"))

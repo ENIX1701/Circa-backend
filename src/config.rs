@@ -44,7 +44,7 @@ impl Config {
     pub fn init() -> Self {
         dotenv().ok();
 
-        let config = Self {
+        Self {
             database_url: env::var("DATABASE_URL").expect("DATABASE_URL must be set in .env"),
             jwt_secret: env::var("JWT_SECRET").expect("JWT_SECRET must be set in .env"),
             frontend_url: env::var("FRONTEND_URL")
@@ -55,9 +55,7 @@ impl Config {
             auth_delivery_mode: AuthDeliveryMode::from_env(
                 &env::var("AUTH_DELIVERY_MODE").unwrap_or_else(|_| "outbox".to_string()),
             ),
-        };
-
-        config
+        }
     }
 
     pub fn test_inbox_enabled(&self) -> bool {
