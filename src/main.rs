@@ -1,3 +1,4 @@
+use actix_files::{Files, NamedFile};
 use actix_web::{App, HttpServer, web};
 use circa_backend::auth;
 use circa_backend::auth::delivery::build_magic_link_delivery;
@@ -8,6 +9,10 @@ use circa_backend::event::repository::EventRepository;
 use circa_backend::event::service::EventService;
 use circa_backend::user;
 use circa_backend::user::{repository::UserRepository, service::UserService};
+
+async fn spa_index() -> actix_web::Result<NamedFile> {
+    Ok(NamedFile::open("./public/index.html")?)
+}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -34,9 +39,14 @@ async fn main() -> std::io::Result<()> {
             .app_data(config.clone())
             .app_data(delivery.clone())
             .app_data(db_data.clone())
-            .configure(user::routes::config)
-            .configure(auth::routes::config)
-            .configure(event::routes::config)
+            .service(
+                web::scope("/api")
+                    .configure(user::routes::config)
+                    .configure(auth::routes::config)
+                    .configure(event::routes::config),
+            )
+            .service(Files::new("/assets", "./public/assets"))
+            .default_service(web::get().to(spa_index))
     })
     .bind(("0.0.0.0", 8080))?
     .run()

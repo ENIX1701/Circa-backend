@@ -45,7 +45,13 @@ impl Config {
         dotenv().ok();
 
         Self {
-            database_url: env::var("DATABASE_URL").expect("DATABASE_URL must be set in .env"),
+            database_url: env::var("DATABASE_URL").unwrap_or_else(|_| {
+                if env::var("APP_ENV").as_deref() == Ok("production") {
+                    "sqlite:///tmp/circa.db?mode=rwc".to_string()
+                } else {
+                    "sqlite://data.db?mode=rwc".to_string()
+                }
+            }),
             jwt_secret: env::var("JWT_SECRET").expect("JWT_SECRET must be set in .env"),
             frontend_url: env::var("FRONTEND_URL")
                 .unwrap_or_else(|_| "http://localhost:5173".to_string()),

@@ -208,14 +208,14 @@ async fn me_endpoint_requires_valid_bearer_token_and_returns_claims() {
     let db = setup_db().await;
     let app = app(&db, AuthDeliveryMode::Outbox).await;
 
-    let unauthorized = test::TestRequest::get().uri("/api/me").to_request();
+    let unauthorized = test::TestRequest::get().uri("/me").to_request();
     assert_eq!(
         test::call_service(&app, unauthorized).await.status(),
         StatusCode::UNAUTHORIZED
     );
 
     let invalid = test::TestRequest::get()
-        .uri("/api/me")
+        .uri("/me")
         .insert_header(("Authorization", "Bearer not-a-jwt"))
         .to_request();
     assert_eq!(
@@ -225,7 +225,7 @@ async fn me_endpoint_requires_valid_bearer_token_and_returns_claims() {
 
     let token = jwt("user-1", "admin").await;
     let valid = test::TestRequest::get()
-        .uri("/api/me")
+        .uri("/me")
         .insert_header(("Authorization", format!("Bearer {token}")))
         .to_request();
 
