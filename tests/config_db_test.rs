@@ -1,5 +1,5 @@
 use circa_backend::{
-    auth::outbox_entity::Entity as OutboxEntity,
+    auth::{entity::Entity as MagicTokenEntity, outbox_entity::Entity as OutboxEntity},
     config::{AppEnvironment, AuthDeliveryMode, Config},
     db,
     event::{
@@ -9,6 +9,7 @@ use circa_backend::{
         planner_timeline_item_entity::Entity as PlannerTimelineItemEntity,
         social_post_entity::Entity as SocialPostEntity,
     },
+    user::entity::Entity as UserEntity,
 };
 use sea_orm::EntityTrait;
 
@@ -35,6 +36,8 @@ fn config_struct_reports_test_inbox_availability_by_delivery_mode() {
 async fn establish_connection_initializes_runtime_sqlite_schema() {
     let db = db::establish_connection("sqlite::memory:").await.unwrap();
 
+    assert!(UserEntity::find().all(&db).await.is_ok());
+    assert!(MagicTokenEntity::find().all(&db).await.is_ok());
     assert!(OutboxEntity::find().all(&db).await.is_ok());
     assert!(EventEntity::find().all(&db).await.is_ok());
     assert!(EventMembershipEntity::find().all(&db).await.is_ok());

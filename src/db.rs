@@ -12,6 +12,35 @@ async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
     if db.get_database_backend() == DatabaseBackend::Sqlite {
         db.execute_unprepared(
             r#"
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                surname TEXT NOT NULL,
+                email TEXT NOT NULL,
+                phone TEXT NOT NULL,
+                role TEXT NOT NULL,
+                status TEXT NOT NULL,
+                availability_hours TEXT NOT NULL
+            );
+            "#,
+        )
+        .await?;
+
+        db.execute_unprepared(
+            r#"
+            CREATE TABLE IF NOT EXISTS magic_tokens (
+                id TEXT PRIMARY KEY NOT NULL,
+                user_id TEXT NOT NULL,
+                token TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                used BOOLEAN NOT NULL DEFAULT 0
+            );
+            "#,
+        )
+        .await?;
+
+        db.execute_unprepared(
+            r#"
             CREATE TABLE IF NOT EXISTS magic_link_outbox (
               id TEXT PRIMARY KEY NOT NULL,
               email TEXT NOT NULL,

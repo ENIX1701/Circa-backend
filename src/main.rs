@@ -24,7 +24,10 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to connect to the database :c");
 
-    let port = std::env::var("PORT").ok().and_then(|value| value.parse::<u16>().ok()).unwrap_or(8080);
+    let port = std::env::var("PORT")
+        .ok()
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(8080);
 
     let user_service = web::Data::new(UserService::new(UserRepository::new(db_conn.clone())));
     let event_service = web::Data::new(EventService::new(EventRepository::new(db_conn.clone())));
