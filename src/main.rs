@@ -2,7 +2,7 @@ use actix_files::{Files, NamedFile};
 use actix_web::{App, HttpServer, web};
 use circa_backend::auth;
 use circa_backend::auth::delivery::build_magic_link_delivery;
-use circa_backend::config::Config;
+use circa_backend::config::{AppEnvironment, Config};
 use circa_backend::db;
 use circa_backend::event;
 use circa_backend::event::repository::EventRepository;
@@ -51,6 +51,8 @@ async fn main() -> std::io::Result<()> {
         .and_then(|value| value.parse::<u16>().ok())
         .unwrap_or(8080);
 
+    let serve_static_frontend = matches!(config.app_env, AppEnvironment::Production);
+
     let user_service = web::Data::new(UserService::new(UserRepository::new(db_conn.clone())));
     let event_service = web::Data::new(EventService::new(EventRepository::new(db_conn.clone())));
     let config = web::Data::new(config);
@@ -72,8 +74,12 @@ async fn main() -> std::io::Result<()> {
                     .configure(auth::routes::config)
                     .configure(event::routes::config),
             )
-            .service(Files::new("/assets", "./public/assets"))
-            .default_service(web::get().to(spa_index))
+            .configure(|cfg| {
+                if serve_static_frontend {
+                    cfg.service(Files::new("/assets", "./public/assets"))
+                        .default_service(web::get().to(spa_index));
+                }
+            })
     })
     .bind(("0.0.0.0", port))?
     .run()
