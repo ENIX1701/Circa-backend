@@ -24,6 +24,28 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to connect to the database :c");
 
+    db::reset_from_seed(&db_conn)
+        .await
+        .expect("Failed to reset database from seed.sql QwQ");
+    let reset_db = db_conn.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval_at(
+            tokio::time::Instant::now() + tokio::time::Duration::from_secs(60 * 60),
+            tokio::time::Duration::from_secs(60 * 60),
+        );
+
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
+        loop {
+            interval.tick().await;
+
+            match db::reset_from_seed(&reset_db).await {
+                Ok(()) => log::info!("Database reset from seed.sql"),
+                Err(error) => log::error!("Failed to reset database from seed.sql >:c [{error}]"),
+            }
+        }
+    });
+
     let port = std::env::var("PORT")
         .ok()
         .and_then(|value| value.parse::<u16>().ok())

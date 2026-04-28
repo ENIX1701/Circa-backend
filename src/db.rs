@@ -1,4 +1,6 @@
-use sea_orm::{ConnectionTrait, Database, DatabaseBackend, DatabaseConnection, DbErr};
+use sea_orm::{
+    ConnectionTrait, Database, DatabaseBackend, DatabaseConnection, DbErr, TransactionTrait,
+};
 
 pub async fn establish_connection(database_url: &str) -> Result<DatabaseConnection, DbErr> {
     let db = Database::connect(database_url).await?;
@@ -6,6 +8,83 @@ pub async fn establish_connection(database_url: &str) -> Result<DatabaseConnecti
 
     println!("Database connected successfully");
     Ok(db)
+}
+
+// since this is a demo instance
+// it needs to periodically refresh the data
+// so that if someone deletes everything (which i kind of expect sadly...)
+// the data will populate automatically again
+const SEED_SQL: &str = include_str!("../seed.sql");
+
+pub async fn reset_from_seed(db: &DatabaseConnection) -> Result<(), DbErr> {
+    if db.get_database_backend() != DatabaseBackend::Sqlite {
+        return Ok(());
+    }
+
+    db.execute_unprepared("PRAGMA foreign_keys = ON").await?;
+
+    let txn = db.begin().await?;
+
+    for statement in seed_statements(SEED_SQL) {
+        let normalized = statement.to_ascii_uppercase();
+
+        if matches!(
+            normalized.as_str(),
+            "PRAGMA FOREIGN_KEYS = ON" | "BEGIN TRANSACTION" | "BEGIN" | "COMMIT" | "ROLLBACK"
+        ) || normalized.starts_with("SELECT ")
+        {
+            continue;
+        }
+
+        txn.execute_unprepared(&statement).await?;
+    }
+
+    txn.commit().await?;
+    Ok(())
+}
+
+fn seed_statements(script: &str) -> Vec<String> {
+    let mut statements = Vec::new();
+    let mut current = String::new();
+    let mut in_single_quote = false;
+    let mut chars = script.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '\'' {
+            current.push(ch);
+
+            if chars.peek() == Some(&'\'') {
+                current.push(chars.next().unwrap());
+            } else {
+                in_single_quote = !in_single_quote;
+            }
+
+            continue;
+        }
+
+        if ch == ';' && !in_single_quote {
+            push_seed_statement(&mut statements, &current);
+            current.clear();
+        } else {
+            current.push(ch);
+        }
+    }
+
+    push_seed_statement(&mut statements, &current);
+    statements
+}
+
+fn push_seed_statement(statements: &mut Vec<String>, raw: &str) {
+    let statement = raw
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with("--"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    if !statement.is_empty() {
+        statements.push(statement);
+    }
 }
 
 async fn initialize_schema(db: &DatabaseConnection) -> Result<(), DbErr> {
