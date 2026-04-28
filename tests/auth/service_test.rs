@@ -1,96 +1,62 @@
+use crate::common::{
+    JWT_SECRET, OutboxSeed, insert_magic_token, insert_outbox, setup_db, test_config,
+};
+use async_trait::async_trait;
 use chrono::{Duration, Utc};
-use circa_backend::auth::{
-    delivery::OutboxDelivery,
-    entity::{self as magic_entity, Entity as MagicTokenEntity},
-    outbox_entity::{self, Entity as OutboxEntity},
-    service::{
-        GENERIC_MAGIC_LINK_MESSAGE, create_magic_token, get_latest_test_inbox_link,
-        verify_magic_token,
+use circa_backend::{
+    auth::{
+        delivery::{MagicLinkDelivery, MagicLinkDeliveryPayload, OutboxDelivery},
+        entity::Entity as MagicTokenEntity,
+        models::Claims,
+        outbox_entity::Entity as OutboxEntity,
+        service::{
+            GENERIC_MAGIC_LINK_MESSAGE, create_magic_token, generate_jwt,
+            generic_magic_link_response, get_latest_test_inbox_link, verify_magic_token,
+        },
     },
+    config::AuthDeliveryMode,
+    error::AppError,
 };
-use sea_orm::{
-    ActiveValue::Set, ConnectOptions, ConnectionTrait, Database, DatabaseConnection, EntityTrait,
-};
+use jsonwebtoken::{DecodingKey, Validation, decode};
+use sea_orm::EntityTrait;
 
-async fn setup_db() -> DatabaseConnection {
-    let mut options = ConnectOptions::new("sqlite::memory:");
-    options
-        .max_connections(1)
-        .min_connections(1)
-        .sqlx_logging(false);
+struct FailingDelivery;
 
-    let db = Database::connect(options).await.unwrap();
-
-    db.execute_unprepared(
-        r#"
-        CREATE TABLE users (
-            id TEXT PRIMARY KEY NOT NULL,
-            first_name TEXT NOT NULL,
-            last_name TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE,
-            role TEXT NOT NULL,
-            status TEXT NOT NULL
-        );
-        "#,
-    )
-    .await
-    .unwrap();
-
-    db.execute_unprepared(
-        r#"
-        CREATE TABLE magic_tokens (
-            id TEXT PRIMARY KEY NOT NULL,
-            user_id TEXT NOT NULL,
-            token TEXT NOT NULL,
-            expires_at TEXT NOT NULL,
-            used BOOLEAN NOT NULL DEFAULT 0
-        );
-        "#,
-    )
-    .await
-    .unwrap();
-
-    db.execute_unprepared(
-        r#"
-        CREATE TABLE magic_link_outbox (
-            id TEXT PRIMARY KEY NOT NULL,
-            email TEXT NOT NULL,
-            magic_token_id TEXT NOT NULL,
-            magic_link TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            expires_at TEXT NOT NULL,
-            used BOOLEAN NOT NULL DEFAULT 0
-        );
-        "#,
-    )
-    .await
-    .unwrap();
-
-    db
+#[async_trait]
+impl MagicLinkDelivery for FailingDelivery {
+    async fn deliver(
+        &self,
+        _db: &sea_orm::DatabaseConnection,
+        _payload: &MagicLinkDeliveryPayload,
+    ) -> Result<(), AppError> {
+        Err(AppError::InternalServerError)
+    }
 }
 
-async fn insert_outbox_row(
-    db: &DatabaseConnection,
-    id: &str,
-    email: &str,
-    magic_token_id: &str,
-    magic_link: &str,
-    created_at: String,
-    expires_at: String,
-    used: bool,
-) {
-    OutboxEntity::insert(outbox_entity::ActiveModel {
-        id: Set(id.to_string()),
-        email: Set(email.to_string()),
-        magic_token_id: Set(magic_token_id.to_string()),
-        magic_link: Set(magic_link.to_string()),
-        created_at: Set(created_at),
-        expires_at: Set(expires_at),
-        used: Set(used),
-    })
-    .exec(db)
-    .await
+#[test]
+fn generic_magic_link_response_uses_security_preserving_message() {
+    let response = generic_magic_link_response();
+
+    assert_eq!(response.message, GENERIC_MAGIC_LINK_MESSAGE);
+}
+
+#[actix_web::test]
+async fn generate_jwt_encodes_subject_role_and_future_expiration() {
+    let token = generate_jwt("user-1", "admin", JWT_SECRET)
+        .await
+        .unwrap()
+        .token;
+
+    let decoded = decode::<Claims>(
+        &token,
+        &DecodingKey::from_secret(JWT_SECRET.as_bytes()),
+        &Validation::default(),
+    )
     .unwrap();
+
+    assert_eq!(decoded.claims.sub, "user-1");
+    assert_eq!(decoded.claims.role, "admin");
+    assert!(decoded.claims.exp > Utc::now().timestamp() as usize);
 }
 
 #[actix_web::test]
@@ -100,7 +66,7 @@ async fn create_magic_token_returns_generic_message_and_writes_outbox() {
     let response = create_magic_token(
         &db,
         &OutboxDelivery,
-        "user-123",
+        "user-1",
         "alice@circa.local",
         "http://localhost:5173",
     )
@@ -110,72 +76,213 @@ async fn create_magic_token_returns_generic_message_and_writes_outbox() {
     assert_eq!(response.message, GENERIC_MAGIC_LINK_MESSAGE);
 
     let tokens = MagicTokenEntity::find().all(&db).await.unwrap();
+    let outbox = OutboxEntity::find().all(&db).await.unwrap();
+
     assert_eq!(tokens.len(), 1);
-    assert_eq!(tokens[0].user_id, "user-123");
+    assert_eq!(tokens[0].user_id, "user-1");
     assert!(!tokens[0].used);
 
-    let outbox_rows = OutboxEntity::find().all(&db).await.unwrap();
-    assert_eq!(outbox_rows.len(), 1);
-    assert_eq!(outbox_rows[0].email, "alice@circa.local");
-    assert_eq!(outbox_rows[0].magic_token_id, tokens[0].id);
+    assert_eq!(outbox.len(), 1);
+    assert_eq!(outbox[0].email, "alice@circa.local");
+    assert_eq!(outbox[0].magic_token_id, tokens[0].id);
     assert!(
-        outbox_rows[0]
+        outbox[0]
             .magic_link
             .starts_with("http://localhost:5173/login?token=")
     );
-    assert!(!outbox_rows[0].used);
+    assert!(!outbox[0].used);
 }
 
 #[actix_web::test]
-async fn get_latest_test_inbox_link_returns_newest_valid_row_only() {
+async fn create_magic_token_removes_token_when_delivery_fails() {
     let db = setup_db().await;
-    let now = Utc::now();
 
-    insert_outbox_row(
+    let err = create_magic_token(
         &db,
-        "expired-row",
+        &FailingDelivery,
+        "user-1",
         "alice@circa.local",
-        "token-expired",
-        "http://localhost:5173/login?token=expired",
-        (now - Duration::minutes(30)).to_rfc3339(),
-        (now - Duration::minutes(5)).to_rfc3339(),
+        "http://localhost:5173",
+    )
+    .await
+    .unwrap_err();
+
+    assert_eq!(err.to_string(), "Internal server error");
+    assert_eq!(MagicTokenEntity::find().all(&db).await.unwrap().len(), 0);
+}
+
+#[actix_web::test]
+async fn verify_magic_token_marks_token_and_outbox_row_used() {
+    let db = setup_db().await;
+    let token_expires_at = (Utc::now() + Duration::minutes(15)).to_rfc3339();
+    let outbox_expires_at = (Utc::now() + Duration::minutes(15)).to_rfc3339();
+
+    insert_magic_token(
+        &db,
+        "magic-token-id",
+        "user-1",
+        "valid-token",
+        &token_expires_at,
         false,
     )
     .await;
 
-    insert_outbox_row(
+    insert_outbox(
         &db,
-        "used-row",
-        "alice@circa.local",
-        "token-used",
-        "http://localhost:5173/login?token=used",
-        (now - Duration::minutes(20)).to_rfc3339(),
-        (now + Duration::minutes(10)).to_rfc3339(),
+        OutboxSeed {
+            id: "outbox-row",
+            email: "alice@circa.local",
+            magic_token_id: "magic-token-id",
+            link: "http://localhost:5173/login?token=valid-token",
+            created_at: "2026-04-20T10:00:00Z",
+            expires_at: &outbox_expires_at,
+            used: false,
+        },
+    )
+    .await;
+
+    let user_id = verify_magic_token(&db, "valid-token").await.unwrap();
+
+    assert_eq!(user_id, "user-1");
+    assert!(
+        MagicTokenEntity::find_by_id("magic-token-id")
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .used
+    );
+    assert!(
+        OutboxEntity::find_by_id("outbox-row")
+            .one(&db)
+            .await
+            .unwrap()
+            .unwrap()
+            .used
+    );
+}
+
+#[actix_web::test]
+async fn verify_magic_token_rejects_missing_used_expired_and_malformed_tokens() {
+    let db = setup_db().await;
+
+    insert_magic_token(
+        &db,
+        "used-id",
+        "user-1",
+        "used-token",
+        &(Utc::now() + Duration::minutes(15)).to_rfc3339(),
         true,
     )
     .await;
-
-    insert_outbox_row(
+    insert_magic_token(
         &db,
-        "older-valid-row",
-        "alice@circa.local",
-        "token-old",
-        "http://localhost:5173/login?token=old",
-        (now - Duration::minutes(10)).to_rfc3339(),
-        (now + Duration::minutes(10)).to_rfc3339(),
+        "expired-id",
+        "user-1",
+        "expired-token",
+        &(Utc::now() - Duration::minutes(1)).to_rfc3339(),
+        false,
+    )
+    .await;
+    insert_magic_token(
+        &db,
+        "bad-date-id",
+        "user-1",
+        "bad-date-token",
+        "not-a-date",
         false,
     )
     .await;
 
-    insert_outbox_row(
+    assert_eq!(
+        verify_magic_token(&db, "missing")
+            .await
+            .unwrap_err()
+            .to_string(),
+        "Bad request: Invalid or expired magic link"
+    );
+    assert_eq!(
+        verify_magic_token(&db, "used-token")
+            .await
+            .unwrap_err()
+            .to_string(),
+        "Bad request: Invalid or expired magic link"
+    );
+    assert_eq!(
+        verify_magic_token(&db, "expired-token")
+            .await
+            .unwrap_err()
+            .to_string(),
+        "Bad request: Magic link has expired"
+    );
+    assert_eq!(
+        verify_magic_token(&db, "bad-date-token")
+            .await
+            .unwrap_err()
+            .to_string(),
+        "Internal server error"
+    );
+}
+
+#[actix_web::test]
+async fn get_latest_test_inbox_link_returns_newest_unused_unexpired_row() {
+    let db = setup_db().await;
+    let future = (Utc::now() + Duration::minutes(15)).to_rfc3339();
+    let past = (Utc::now() - Duration::minutes(1)).to_rfc3339();
+
+    insert_outbox(
         &db,
-        "latest-valid-row",
-        "alice@circa.local",
-        "token-latest",
-        "http://localhost:5173/login?token=latest",
-        now.to_rfc3339(),
-        (now + Duration::minutes(10)).to_rfc3339(),
-        false,
+        OutboxSeed {
+            id: "expired",
+            email: "alice@circa.local",
+            magic_token_id: "expired-token",
+            link: "http://localhost/expired",
+            created_at: "2026-04-20T10:00:00Z",
+            expires_at: &past,
+            used: false,
+        },
+    )
+    .await;
+
+    insert_outbox(
+        &db,
+        OutboxSeed {
+            id: "used",
+            email: "alice@circa.local",
+            magic_token_id: "used-token",
+            link: "http://localhost/used",
+            created_at: "2026-04-20T10:01:00Z",
+            expires_at: &future,
+            used: true,
+        },
+    )
+    .await;
+
+    insert_outbox(
+        &db,
+        OutboxSeed {
+            id: "older",
+            email: "alice@circa.local",
+            magic_token_id: "older-token",
+            link: "http://localhost/older",
+            created_at: "2026-04-20T10:02:00Z",
+            expires_at: &future,
+            used: false,
+        },
+    )
+    .await;
+
+    insert_outbox(
+        &db,
+        OutboxSeed {
+            id: "latest",
+            email: "alice@circa.local",
+            magic_token_id: "latest-token",
+            link: "http://localhost/latest",
+            created_at: "2026-04-20T10:03:00Z",
+            expires_at: &future,
+            used: false,
+        },
     )
     .await;
 
@@ -184,53 +291,24 @@ async fn get_latest_test_inbox_link_returns_newest_valid_row_only() {
         .unwrap();
 
     assert_eq!(preview.email, "alice@circa.local");
-    assert_eq!(
-        preview.magic_link,
-        "http://localhost:5173/login?token=latest"
-    );
+    assert_eq!(preview.magic_link, "http://localhost/latest");
 }
 
 #[actix_web::test]
-async fn verify_magic_token_marks_token_and_outbox_row_used() {
+async fn get_latest_test_inbox_link_returns_not_found_when_no_valid_row_exists() {
     let db = setup_db().await;
 
-    MagicTokenEntity::insert(magic_entity::ActiveModel {
-        id: Set("magic-token-id".to_string()),
-        user_id: Set("user-123".to_string()),
-        token: Set("valid-token".to_string()),
-        expires_at: Set((Utc::now() + Duration::minutes(15)).to_rfc3339()),
-        used: Set(false),
-    })
-    .exec(&db)
-    .await
-    .unwrap();
-
-    insert_outbox_row(
-        &db,
-        "outbox-row",
-        "alice@circa.local",
-        "magic-token-id",
-        "http://localhost:5173/login?token=valid-token",
-        Utc::now().to_rfc3339(),
-        (Utc::now() + Duration::minutes(15)).to_rfc3339(),
-        false,
-    )
-    .await;
-
-    let user_id = verify_magic_token(&db, "valid-token").await.unwrap();
-    assert_eq!(user_id, "user-123");
-
-    let token = MagicTokenEntity::find_by_id("magic-token-id")
-        .one(&db)
+    let err = get_latest_test_inbox_link(&db, "missing@circa.local")
         .await
-        .unwrap()
-        .unwrap();
-    assert!(token.used);
+        .unwrap_err();
 
-    let outbox_row = OutboxEntity::find_by_id("outbox-row")
-        .one(&db)
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(outbox_row.used);
+    assert_eq!(err.to_string(), "Not found: No valid magic link found");
+}
+
+#[actix_web::test]
+async fn auth_config_helper_keeps_test_secret_consistent() {
+    let config = test_config(AuthDeliveryMode::Outbox);
+
+    assert_eq!(config.jwt_secret, JWT_SECRET);
+    assert!(config.test_inbox_enabled());
 }

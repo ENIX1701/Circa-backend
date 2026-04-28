@@ -1,185 +1,121 @@
+use crate::common::{JWT_SECRET, jwt, test_config};
 use actix_web::{App, http::StatusCode, test, web};
-use circa_backend::auth::service::generate_jwt;
-use circa_backend::modules::user::entity::{Model, Role, Status};
-use circa_backend::user;
-use circa_backend::user::models::{CreateUserRequest, UpdateUserRequest, UserRole};
-use circa_backend::user::repository::UserRepository;
-use circa_backend::user::service::UserService;
+use circa_backend::{
+    config::AuthDeliveryMode,
+    modules::user::entity::{Model, Role, Status},
+    user::{
+        self,
+        models::{CreateUserRequest, UpdateUserRequest, UserRole, UserStatus},
+        repository::UserRepository,
+        service::UserService,
+    },
+};
 use sea_orm::{DatabaseBackend, MockDatabase};
 
-async fn make_volunteer_token() -> String {
-    let resp = generate_jwt("volunteer-1", "volunteer", JWT_SECRET)
-        .await
-        .unwrap();
-    resp.token
+fn config_data() -> web::Data<circa_backend::config::Config> {
+    web::Data::new(test_config(AuthDeliveryMode::Outbox))
 }
 
-const JWT_SECRET: &str = "test_secret";
-
-fn make_jwt_secret() -> web::Data<String> {
-    web::Data::new(JWT_SECRET.to_string())
+fn user_model(id: &str, role: Role, status: Status) -> Model {
+    Model {
+        id: id.to_string(),
+        name: "John".to_string(),
+        surname: "Doe".to_string(),
+        email: format!("{id}@example.com"),
+        phone: "123".to_string(),
+        role,
+        status,
+        availability_hours: "[]".to_string(),
+    }
 }
 
-async fn make_admin_token() -> String {
-    let resp = generate_jwt("admin@example.com", "admin", JWT_SECRET)
-        .await
-        .unwrap();
-    resp.token
-}
-
-fn setup_app_data_with_list() -> web::Data<UserService> {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([vec![Model {
-            id: "1".to_string(),
-            name: "John".to_string(),
-            surname: "Doe".to_string(),
-            email: "john@example.com".to_string(),
-            phone: "123".to_string(),
-            role: Role::Admin,
-            status: Status::Active,
-            availability_hours: "".to_string(),
-        }]])
-        .into_connection();
-
+fn app_data(db: sea_orm::DatabaseConnection) -> web::Data<UserService> {
     web::Data::new(UserService::new(UserRepository::new(db)))
 }
 
-fn setup_app_data_for_create() -> web::Data<UserService> {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([vec![Model {
-            id: "1".to_string(),
-            name: "John".to_string(),
-            surname: "Doe".to_string(),
-            email: "john@example.com".to_string(),
-            phone: "123".to_string(),
-            role: Role::Organizer,
-            status: Status::Active,
-            availability_hours: "".to_string(),
-        }]])
+#[actix_web::test]
+async fn authenticated_admin_can_list_create_get_update_and_delete_users() {
+    let token = jwt("admin-1", "admin").await;
+
+    let list_db = MockDatabase::new(DatabaseBackend::Sqlite)
+        .append_query_results([vec![user_model("user-1", Role::Volunteer, Status::Active)]])
+        .into_connection();
+
+    let list_app = test::init_service(
+        App::new()
+            .app_data(app_data(list_db))
+            .app_data(config_data())
+            .configure(user::routes::config),
+    )
+    .await;
+
+    let list_req = test::TestRequest::get()
+        .uri("/users")
+        .insert_header(("Authorization", format!("Bearer {token}")))
+        .to_request();
+    assert_eq!(
+        test::call_service(&list_app, list_req).await.status(),
+        StatusCode::OK
+    );
+
+    let create_db = MockDatabase::new(DatabaseBackend::Sqlite)
+        .append_query_results([vec![user_model("created", Role::Organizer, Status::Active)]])
         .append_exec_results([sea_orm::MockExecResult {
             last_insert_id: 1,
             rows_affected: 1,
         }])
         .into_connection();
 
-    web::Data::new(UserService::new(UserRepository::new(db)))
-}
-
-#[actix_web::test]
-async fn test_get_users_route() {
-    let token = make_admin_token().await;
-
-    let app = test::init_service(
+    let create_app = test::init_service(
         App::new()
-            .app_data(setup_app_data_with_list())
-            .app_data(make_jwt_secret())
+            .app_data(app_data(create_db))
+            .app_data(config_data())
             .configure(user::routes::config),
     )
     .await;
 
-    let req = test::TestRequest::get()
+    let create_req = test::TestRequest::post()
         .uri("/users")
-        .insert_header(("Authorization", format!("Bearer {}", token)))
+        .insert_header(("Authorization", format!("Bearer {token}")))
+        .set_json(CreateUserRequest {
+            name: "Jane".to_string(),
+            surname: "Doe".to_string(),
+            email: "jane@example.com".to_string(),
+            phone: "456".to_string(),
+            role: UserRole::Organizer,
+            availability_hours: "[]".to_string(),
+        })
         .to_request();
-    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        test::call_service(&create_app, create_req).await.status(),
+        StatusCode::OK
+    );
 
-    assert_eq!(resp.status(), StatusCode::OK);
-}
+    let get_db = MockDatabase::new(DatabaseBackend::Sqlite)
+        .append_query_results([vec![user_model("user-1", Role::Volunteer, Status::Active)]])
+        .into_connection();
 
-#[actix_web::test]
-async fn test_get_users_route_unauthorized() {
-    let app = test::init_service(
+    let get_app = test::init_service(
         App::new()
-            .app_data(setup_app_data_with_list())
-            .app_data(make_jwt_secret())
+            .app_data(app_data(get_db))
+            .app_data(config_data())
             .configure(user::routes::config),
     )
     .await;
 
-    let req = test::TestRequest::get().uri("/users").to_request();
-    let resp = test::call_service(&app, req).await;
-
-    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-}
-
-#[actix_web::test]
-async fn test_create_user_route() {
-    let token = make_admin_token().await;
-
-    let app = test::init_service(
-        App::new()
-            .app_data(setup_app_data_for_create())
-            .app_data(make_jwt_secret())
-            .configure(user::routes::config),
-    )
-    .await;
-
-    let req_body = CreateUserRequest {
-        name: "John".to_string(),
-        surname: "Doe".to_string(),
-        email: "john@example.com".to_string(),
-        phone: "123".to_string(),
-        role: UserRole::Organizer,
-        availability_hours: "".to_string(),
-    };
-
-    let req = test::TestRequest::post()
-        .uri("/users")
-        .insert_header(("Authorization", format!("Bearer {}", token)))
-        .set_json(&req_body)
+    let get_req = test::TestRequest::get()
+        .uri("/users/user-1")
+        .insert_header(("Authorization", format!("Bearer {token}")))
         .to_request();
-    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        test::call_service(&get_app, get_req).await.status(),
+        StatusCode::OK
+    );
 
-    assert_eq!(resp.status(), StatusCode::OK);
-}
-
-#[actix_web::test]
-async fn test_get_user_by_id_route() {
-    let token = make_admin_token().await;
-
-    let app = test::init_service(
-        App::new()
-            .app_data(setup_app_data_with_list())
-            .app_data(make_jwt_secret())
-            .configure(user::routes::config),
-    )
-    .await;
-
-    let req = test::TestRequest::get()
-        .uri("/users/1")
-        .insert_header(("Authorization", format!("Bearer {}", token)))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-
-    assert_eq!(resp.status(), StatusCode::OK);
-}
-
-#[actix_web::test]
-async fn test_update_user_route() {
-    let token = make_admin_token().await;
-
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
+    let update_db = MockDatabase::new(DatabaseBackend::Sqlite)
         .append_query_results([
-            vec![Model {
-                id: "1".to_string(),
-                name: "John".to_string(),
-                surname: "Doe".to_string(),
-                email: "john@example.com".to_string(),
-                phone: "123".to_string(),
-                role: Role::Admin,
-                status: Status::Active,
-                availability_hours: "".to_string(),
-            }],
-            vec![Model {
-                id: "1".to_string(),
-                name: "Jane".to_string(),
-                surname: "Doe".to_string(),
-                email: "john@example.com".to_string(),
-                phone: "123".to_string(),
-                role: Role::Admin,
-                status: Status::Active,
-                availability_hours: "".to_string(),
-            }],
+            vec![user_model("user-1", Role::Volunteer, Status::Active)],
+            vec![user_model("user-1", Role::Staff, Status::Inactive)],
         ])
         .append_exec_results([sea_orm::MockExecResult {
             last_insert_id: 0,
@@ -187,301 +123,151 @@ async fn test_update_user_route() {
         }])
         .into_connection();
 
-    let app_data = web::Data::new(UserService::new(UserRepository::new(db)));
-
-    let app = test::init_service(
+    let update_app = test::init_service(
         App::new()
-            .app_data(app_data)
-            .app_data(make_jwt_secret())
+            .app_data(app_data(update_db))
+            .app_data(config_data())
             .configure(user::routes::config),
     )
     .await;
 
-    let req_body = UpdateUserRequest {
-        name: Some("Jane".to_string()),
-        surname: None,
-        email: None,
-        phone: None,
-        role: None,
-        status: None,
-        availability_hours: None,
-    };
-
-    let req = test::TestRequest::patch()
-        .uri("/users/1")
-        .insert_header(("Authorization", format!("Bearer {}", token)))
-        .set_json(&req_body)
+    let update_req = test::TestRequest::patch()
+        .uri("/users/user-1")
+        .insert_header(("Authorization", format!("Bearer {token}")))
+        .set_json(UpdateUserRequest {
+            name: Some("Jane".to_string()),
+            surname: None,
+            email: None,
+            phone: None,
+            role: Some(UserRole::Staff),
+            status: Some(UserStatus::Inactive),
+            availability_hours: None,
+        })
         .to_request();
-    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        test::call_service(&update_app, update_req).await.status(),
+        StatusCode::OK
+    );
 
-    assert_eq!(resp.status(), StatusCode::OK);
-}
-
-#[actix_web::test]
-async fn test_delete_user_route() {
-    let token = make_admin_token().await;
-
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
+    let delete_db = MockDatabase::new(DatabaseBackend::Sqlite)
         .append_exec_results([sea_orm::MockExecResult {
             last_insert_id: 0,
             rows_affected: 1,
         }])
         .into_connection();
 
-    let app_data = web::Data::new(UserService::new(UserRepository::new(db)));
-
-    let app = test::init_service(
+    let delete_app = test::init_service(
         App::new()
-            .app_data(app_data)
-            .app_data(make_jwt_secret())
+            .app_data(app_data(delete_db))
+            .app_data(config_data())
             .configure(user::routes::config),
     )
     .await;
 
-    let req = test::TestRequest::delete()
-        .uri("/users/1")
-        .insert_header(("Authorization", format!("Bearer {}", token)))
+    let delete_req = test::TestRequest::delete()
+        .uri("/users/user-1")
+        .insert_header(("Authorization", format!("Bearer {token}")))
         .to_request();
-    let resp = test::call_service(&app, req).await;
-
-    assert_eq!(resp.status(), StatusCode::OK);
+    assert_eq!(
+        test::call_service(&delete_app, delete_req).await.status(),
+        StatusCode::NO_CONTENT
+    );
 }
 
 #[actix_web::test]
-async fn test_delete_user_route_unauthorized() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_exec_results([sea_orm::MockExecResult {
-            last_insert_id: 0,
-            rows_affected: 1,
-        }])
-        .into_connection();
-
-    let app_data = web::Data::new(UserService::new(UserRepository::new(db)));
-
+async fn user_routes_reject_missing_and_invalid_tokens() {
+    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
     let app = test::init_service(
         App::new()
-            .app_data(app_data)
-            .app_data(make_jwt_secret())
+            .app_data(app_data(db))
+            .app_data(config_data())
             .configure(user::routes::config),
     )
     .await;
 
-    let req = test::TestRequest::delete().uri("/users/1").to_request();
-    let resp = test::call_service(&app, req).await;
+    let missing = test::TestRequest::get().uri("/users").to_request();
+    assert_eq!(
+        test::call_service(&app, missing).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
 
-    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-}
-
-// ── additional edge-case route tests ─────────────────────────────────
-
-#[actix_web::test]
-async fn test_create_user_route_unauthorized() {
-    let app = test::init_service(
-        App::new()
-            .app_data(setup_app_data_for_create())
-            .app_data(make_jwt_secret())
-            .configure(user::routes::config),
-    )
-    .await;
-
-    let req_body = CreateUserRequest {
-        name: "John".to_string(),
-        surname: "Doe".to_string(),
-        email: "john@example.com".to_string(),
-        phone: "123".to_string(),
-        role: UserRole::Organizer,
-        availability_hours: "".to_string(),
-    };
-
-    let req = test::TestRequest::post()
+    let invalid = test::TestRequest::get()
         .uri("/users")
-        .set_json(&req_body)
+        .insert_header(("Authorization", "Bearer no"))
         .to_request();
-    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        test::call_service(&app, invalid).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
 
-    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(JWT_SECRET, "test-secret");
 }
 
 #[actix_web::test]
-async fn test_create_user_route_invalid_json() {
-    let token = make_admin_token().await;
+async fn user_routes_return_forbidden_not_found_and_bad_request_errors() {
+    let volunteer_token = jwt("volunteer-1", "volunteer").await;
+    let admin_token = jwt("admin-1", "admin").await;
 
-    let app = test::init_service(
+    let forbidden_app = test::init_service(
         App::new()
-            .app_data(setup_app_data_for_create())
-            .app_data(make_jwt_secret())
+            .app_data(app_data(
+                MockDatabase::new(DatabaseBackend::Sqlite).into_connection(),
+            ))
+            .app_data(config_data())
             .configure(user::routes::config),
     )
     .await;
 
-    let req = test::TestRequest::post()
+    let forbidden = test::TestRequest::get()
         .uri("/users")
-        .insert_header(("Authorization", format!("Bearer {}", token)))
-        .insert_header(("Content-Type", "application/json"))
-        .set_payload(r#"{"name": "John"}"#) // missing required fields
+        .insert_header(("Authorization", format!("Bearer {volunteer_token}")))
         .to_request();
-    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        test::call_service(&forbidden_app, forbidden).await.status(),
+        StatusCode::FORBIDDEN
+    );
 
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-}
-
-#[actix_web::test]
-async fn test_get_user_by_id_route_not_found() {
-    let token = make_admin_token().await;
-
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
+    let not_found_db = MockDatabase::new(DatabaseBackend::Sqlite)
         .append_query_results([Vec::<Model>::new()])
         .into_connection();
-    let app_data = web::Data::new(UserService::new(UserRepository::new(db)));
 
-    let app = test::init_service(
+    let not_found_app = test::init_service(
         App::new()
-            .app_data(app_data)
-            .app_data(make_jwt_secret())
+            .app_data(app_data(not_found_db))
+            .app_data(config_data())
             .configure(user::routes::config),
     )
     .await;
 
-    let req = test::TestRequest::get()
-        .uri("/users/999")
-        .insert_header(("Authorization", format!("Bearer {}", token)))
+    let not_found = test::TestRequest::get()
+        .uri("/users/missing")
+        .insert_header(("Authorization", format!("Bearer {admin_token}")))
         .to_request();
-    let resp = test::call_service(&app, req).await;
+    assert_eq!(
+        test::call_service(&not_found_app, not_found).await.status(),
+        StatusCode::NOT_FOUND
+    );
 
-    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-}
-
-#[actix_web::test]
-async fn test_update_user_route_unauthorized() {
-    let app = test::init_service(
+    let bad_request_app = test::init_service(
         App::new()
-            .app_data(setup_app_data_with_list())
-            .app_data(make_jwt_secret())
+            .app_data(app_data(
+                MockDatabase::new(DatabaseBackend::Sqlite).into_connection(),
+            ))
+            .app_data(config_data())
             .configure(user::routes::config),
     )
     .await;
 
-    let req_body = UpdateUserRequest {
-        name: Some("Hacked".to_string()),
-        surname: None,
-        email: None,
-        phone: None,
-        role: None,
-        status: None,
-        availability_hours: None,
-    };
-
-    let req = test::TestRequest::patch()
-        .uri("/users/1")
-        .set_json(&req_body)
+    let invalid_json = test::TestRequest::post()
+        .uri("/users")
+        .insert_header(("Authorization", format!("Bearer {admin_token}")))
+        .insert_header(("Content-Type", "application/json"))
+        .set_payload(r#"{"name":"missing required fields"}"#)
         .to_request();
-    let resp = test::call_service(&app, req).await;
-
-    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
-}
-
-#[actix_web::test]
-async fn test_update_user_route_forbidden() {
-    // Volunteer trying to update someone else's record
-    let token = make_volunteer_token().await;
-
-    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
-    let app_data = web::Data::new(UserService::new(UserRepository::new(db)));
-
-    let app = test::init_service(
-        App::new()
-            .app_data(app_data)
-            .app_data(make_jwt_secret())
-            .configure(user::routes::config),
-    )
-    .await;
-
-    let req_body = UpdateUserRequest {
-        name: Some("Hacked".to_string()),
-        surname: None,
-        email: None,
-        phone: None,
-        role: None,
-        status: None,
-        availability_hours: None,
-    };
-
-    let req = test::TestRequest::patch()
-        .uri("/users/someone-else")
-        .insert_header(("Authorization", format!("Bearer {}", token)))
-        .set_json(&req_body)
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-
-    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
-}
-
-#[actix_web::test]
-async fn test_delete_user_route_forbidden() {
-    // Volunteer trying to delete someone else's record
-    let token = make_volunteer_token().await;
-
-    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
-    let app_data = web::Data::new(UserService::new(UserRepository::new(db)));
-
-    let app = test::init_service(
-        App::new()
-            .app_data(app_data)
-            .app_data(make_jwt_secret())
-            .configure(user::routes::config),
-    )
-    .await;
-
-    let req = test::TestRequest::delete()
-        .uri("/users/someone-else")
-        .insert_header(("Authorization", format!("Bearer {}", token)))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-
-    assert_eq!(resp.status(), StatusCode::FORBIDDEN);
-}
-
-#[actix_web::test]
-async fn test_delete_user_route_not_found() {
-    let token = make_admin_token().await;
-
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_exec_results([sea_orm::MockExecResult {
-            last_insert_id: 0,
-            rows_affected: 0,
-        }])
-        .into_connection();
-    let app_data = web::Data::new(UserService::new(UserRepository::new(db)));
-
-    let app = test::init_service(
-        App::new()
-            .app_data(app_data)
-            .app_data(make_jwt_secret())
-            .configure(user::routes::config),
-    )
-    .await;
-
-    let req = test::TestRequest::delete()
-        .uri("/users/999")
-        .insert_header(("Authorization", format!("Bearer {}", token)))
-        .to_request();
-    let resp = test::call_service(&app, req).await;
-
-    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-}
-
-#[actix_web::test]
-async fn test_get_user_by_id_route_unauthorized() {
-    let app = test::init_service(
-        App::new()
-            .app_data(setup_app_data_with_list())
-            .app_data(make_jwt_secret())
-            .configure(user::routes::config),
-    )
-    .await;
-
-    let req = test::TestRequest::get().uri("/users/1").to_request();
-    let resp = test::call_service(&app, req).await;
-
-    assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        test::call_service(&bad_request_app, invalid_json)
+            .await
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
 }

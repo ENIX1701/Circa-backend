@@ -13,11 +13,19 @@ impl UserService {
         Self { repository }
     }
 
-    pub async fn get_users(&self) -> Result<Vec<User>, AppError> {
+    pub async fn get_users(&self, claims: &Claims) -> Result<Vec<User>, AppError> {
+        Self::require_admin(claims)?;
         self.repository.find_all().await
     }
 
-    pub async fn get_user(&self, id: &str) -> Result<User, AppError> {
+    pub async fn get_user(&self, id: &str, claims: &Claims) -> Result<User, AppError> {
+        Self::require_self_or_admin(id, claims)?;
+
+        let user = self.repository.find_by_id(id).await?;
+        user.ok_or_else(|| AppError::NotFound("User not found".to_string()))
+    }
+
+    pub async fn get_user_for_auth(&self, id: &str) -> Result<User, AppError> {
         let user = self.repository.find_by_id(id).await?;
         user.ok_or_else(|| AppError::NotFound("User not found".to_string()))
     }
@@ -27,7 +35,13 @@ impl UserService {
         user.ok_or_else(|| AppError::NotFound("User not found".to_string()))
     }
 
-    pub async fn create_user(&self, req: CreateUserRequest) -> Result<User, AppError> {
+    pub async fn create_user(
+        &self,
+        req: CreateUserRequest,
+        claims: &Claims,
+    ) -> Result<User, AppError> {
+        Self::require_admin(claims)?;
+
         if req.email.is_empty() {
             return Err(AppError::BadRequest("Email is required".to_string()));
         }
@@ -38,21 +52,37 @@ impl UserService {
     pub async fn update_user(
         &self,
         id: &str,
-        req: UpdateUserRequest,
+        mut req: UpdateUserRequest,
         claims: &Claims,
     ) -> Result<User, AppError> {
-        if claims.sub != id && claims.role != "admin" && claims.role != "organizer" {
-            return Err(AppError::Forbidden);
+        Self::require_self_or_admin(id, claims)?;
+
+        if claims.role != "admin" {
+            req.role = None;
+            req.status = None;
         }
 
         self.repository.update(id, req).await
     }
 
     pub async fn delete_user(&self, id: &str, claims: &Claims) -> Result<(), AppError> {
-        if claims.sub != id && claims.role != "admin" {
-            return Err(AppError::Forbidden);
-        }
-
+        Self::require_admin(claims)?;
         self.repository.delete(id).await
+    }
+
+    fn require_admin(claims: &Claims) -> Result<(), AppError> {
+        if claims.role == "admin" {
+            Ok(())
+        } else {
+            Err(AppError::Forbidden)
+        }
+    }
+
+    fn require_self_or_admin(id: &str, claims: &Claims) -> Result<(), AppError> {
+        if claims.sub == id || claims.role == "admin" {
+            Ok(())
+        } else {
+            Err(AppError::Forbidden)
+        }
     }
 }

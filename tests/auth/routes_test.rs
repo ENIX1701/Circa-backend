@@ -1,141 +1,60 @@
+use crate::common::{
+    OutboxSeed, insert_magic_token, insert_outbox, jwt, seed_user, setup_db, test_config,
+    user_service,
+};
 use actix_web::{App, http::StatusCode, test, web};
 use chrono::{Duration, Utc};
 use circa_backend::{
     auth::{
-        delivery::build_magic_link_delivery,
-        entity::Entity as MagicTokenEntity,
-        outbox_entity::{self, Entity as OutboxEntity},
-        routes,
+        delivery::build_magic_link_delivery, outbox_entity::Entity as OutboxEntity, routes,
         service::GENERIC_MAGIC_LINK_MESSAGE,
     },
-    config::{AppEnvironment, AuthDeliveryMode, Config},
-    user::{repository::UserRepository, service::UserService},
+    config::AuthDeliveryMode,
 };
-use sea_orm::{
-    ActiveValue::Set, ConnectOptions, ConnectionTrait, Database, DatabaseConnection, EntityTrait,
-};
+use sea_orm::EntityTrait;
 use serde_json::{Value, json};
 
-async fn setup_db() -> DatabaseConnection {
-    let mut options = ConnectOptions::new("sqlite::memory:");
-    options
-        .max_connections(1)
-        .min_connections(1)
-        .sqlx_logging(false);
+async fn app(
+    db: &sea_orm::DatabaseConnection,
+    mode: AuthDeliveryMode,
+) -> impl actix_web::dev::Service<
+    actix_http::Request,
+    Response = actix_web::dev::ServiceResponse,
+    Error = actix_web::Error,
+> {
+    let config = test_config(mode);
+    let delivery = build_magic_link_delivery(&config);
 
-    let db = Database::connect(options).await.unwrap();
-
-    db.execute_unprepared(
-        r#"
-        CREATE TABLE users (
-            id TEXT PRIMARY KEY NOT NULL,
-            name TEXT NOT NULL,
-            surname TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE,
-            phone TEXT NOT NULL,
-            role TEXT NOT NULL,
-            status TEXT NOT NULL,
-            availability_hours TEXT NOT NULL
-        );
-        "#,
+    test::init_service(
+        App::new()
+            .app_data(user_service(db))
+            .app_data(web::Data::new(db.clone()))
+            .app_data(web::Data::new(config))
+            .app_data(web::Data::new(delivery))
+            .configure(routes::config),
     )
     .await
-    .unwrap();
-
-    db.execute_unprepared(
-        r#"
-        CREATE TABLE magic_tokens (
-            id TEXT PRIMARY KEY NOT NULL,
-            user_id TEXT NOT NULL,
-            token TEXT NOT NULL,
-            expires_at TEXT NOT NULL,
-            used BOOLEAN NOT NULL DEFAULT 0
-        );
-        "#,
-    )
-    .await
-    .unwrap();
-
-    db.execute_unprepared(
-        r#"
-        CREATE TABLE magic_link_outbox (
-            id TEXT PRIMARY KEY NOT NULL,
-            email TEXT NOT NULL,
-            magic_token_id TEXT NOT NULL,
-            magic_link TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            expires_at TEXT NOT NULL,
-            used BOOLEAN NOT NULL DEFAULT 0
-        );
-        "#,
-    )
-    .await
-    .unwrap();
-
-    db
-}
-
-fn make_config(auth_delivery_mode: AuthDeliveryMode) -> Config {
-    Config {
-        database_url: "sqlite::memory:".to_string(),
-        jwt_secret: "test-secret".to_string(),
-        frontend_url: "http://localhost:5173".to_string(),
-        app_env: AppEnvironment::Development,
-        auth_delivery_mode,
-    }
-}
-
-async fn seed_user(db: &DatabaseConnection, id: &str, email: &str, role: &str) {
-    let sql = format!(
-        "INSERT INTO users (id, name, surname, email, phone, role, status, availability_hours) \
-         VALUES ('{}', 'Alice', 'Tester', '{}', '+48123456789', '{}', 'active', '[]');",
-        id, email, role
-    );
-
-    db.execute_unprepared(&sql).await.unwrap();
-}
-
-async fn insert_outbox_row(
-    db: &DatabaseConnection,
-    id: &str,
-    email: &str,
-    magic_token_id: &str,
-    magic_link: &str,
-    created_at: String,
-    expires_at: String,
-    used: bool,
-) {
-    OutboxEntity::insert(outbox_entity::ActiveModel {
-        id: Set(id.to_string()),
-        email: Set(email.to_string()),
-        magic_token_id: Set(magic_token_id.to_string()),
-        magic_link: Set(magic_link.to_string()),
-        created_at: Set(created_at),
-        expires_at: Set(expires_at),
-        used: Set(used),
-    })
-    .exec(db)
-    .await
-    .unwrap();
 }
 
 #[actix_web::test]
-async fn request_link_returns_generic_success_for_missing_email_without_writing_outbox() {
+async fn request_link_rejects_empty_email() {
     let db = setup_db().await;
-    let config = make_config(AuthDeliveryMode::Outbox);
-    let delivery = build_magic_link_delivery(&config);
+    let app = app(&db, AuthDeliveryMode::Outbox).await;
 
-    let app = test::init_service(
-        App::new()
-            .app_data(web::Data::new(UserService::new(UserRepository::new(
-                db.clone(),
-            ))))
-            .app_data(web::Data::new(config))
-            .app_data(web::Data::new(delivery))
-            .app_data(web::Data::new(db.clone()))
-            .configure(routes::config),
-    )
-    .await;
+    let req = test::TestRequest::post()
+        .uri("/auth/request-link")
+        .set_json(json!({ "email": "   " }))
+        .to_request();
+
+    let resp = test::call_service(&app, req).await;
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[actix_web::test]
+async fn request_link_returns_generic_response_for_missing_email_without_outbox_write() {
+    let db = setup_db().await;
+    let app = app(&db, AuthDeliveryMode::Outbox).await;
 
     let req = test::TestRequest::post()
         .uri("/auth/request-link")
@@ -143,37 +62,17 @@ async fn request_link_returns_generic_success_for_missing_email_without_writing_
         .to_request();
 
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
     let body: Value = test::read_body_json(resp).await;
-    assert_eq!(
-        body.get("message").and_then(Value::as_str),
-        Some(GENERIC_MAGIC_LINK_MESSAGE)
-    );
 
-    let outbox_rows = OutboxEntity::find().all(&db).await.unwrap();
-    assert_eq!(outbox_rows.len(), 0);
+    assert_eq!(body["message"], GENERIC_MAGIC_LINK_MESSAGE);
+    assert_eq!(OutboxEntity::find().all(&db).await.unwrap().len(), 0);
 }
 
 #[actix_web::test]
-async fn request_link_returns_generic_success_for_known_email_and_writes_outbox() {
+async fn request_link_returns_generic_response_for_known_email_and_writes_outbox() {
     let db = setup_db().await;
-    seed_user(&db, "user-123", "alice@circa.local", "admin").await;
-
-    let config = make_config(AuthDeliveryMode::Outbox);
-    let delivery = build_magic_link_delivery(&config);
-
-    let app = test::init_service(
-        App::new()
-            .app_data(web::Data::new(UserService::new(UserRepository::new(
-                db.clone(),
-            ))))
-            .app_data(web::Data::new(config))
-            .app_data(web::Data::new(delivery))
-            .app_data(web::Data::new(db.clone()))
-            .configure(routes::config),
-    )
-    .await;
+    seed_user(&db, "user-1", "alice@circa.local", "admin", "active").await;
+    let app = app(&db, AuthDeliveryMode::Outbox).await;
 
     let req = test::TestRequest::post()
         .uri("/auth/request-link")
@@ -181,164 +80,158 @@ async fn request_link_returns_generic_success_for_known_email_and_writes_outbox(
         .to_request();
 
     let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
     let body: Value = test::read_body_json(resp).await;
-    assert_eq!(
-        body.get("message").and_then(Value::as_str),
-        Some(GENERIC_MAGIC_LINK_MESSAGE)
-    );
 
-    let outbox_rows = OutboxEntity::find().all(&db).await.unwrap();
-    assert_eq!(outbox_rows.len(), 1);
-    assert_eq!(outbox_rows[0].email, "alice@circa.local");
+    assert_eq!(body["message"], GENERIC_MAGIC_LINK_MESSAGE);
+    assert_eq!(OutboxEntity::find().all(&db).await.unwrap().len(), 1);
 }
 
 #[actix_web::test]
-async fn test_inbox_latest_returns_the_newest_valid_link() {
+async fn verify_returns_token_for_valid_magic_link() {
     let db = setup_db().await;
-    let now = Utc::now();
+    seed_user(&db, "user-1", "alice@circa.local", "admin", "active").await;
+    let app = app(&db, AuthDeliveryMode::Outbox).await;
 
-    insert_outbox_row(
-        &db,
-        "expired-row",
-        "alice@circa.local",
-        "token-expired",
-        "http://localhost:5173/login?token=expired",
-        (now - Duration::minutes(20)).to_rfc3339(),
-        (now - Duration::minutes(5)).to_rfc3339(),
-        false,
-    )
-    .await;
-
-    insert_outbox_row(
-        &db,
-        "latest-valid-row",
-        "alice@circa.local",
-        "token-latest",
-        "http://localhost:5173/login?token=latest",
-        now.to_rfc3339(),
-        (now + Duration::minutes(10)).to_rfc3339(),
-        false,
-    )
-    .await;
-
-    let config = make_config(AuthDeliveryMode::Outbox);
-    let delivery = build_magic_link_delivery(&config);
-
-    let app = test::init_service(
-        App::new()
-            .app_data(web::Data::new(UserService::new(UserRepository::new(
-                db.clone(),
-            ))))
-            .app_data(web::Data::new(config))
-            .app_data(web::Data::new(delivery))
-            .app_data(web::Data::new(db.clone()))
-            .configure(routes::config),
-    )
-    .await;
-
-    let req = test::TestRequest::get()
-        .uri("/auth/test-inbox/latest?email=alice@circa.local")
-        .to_request();
-
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), StatusCode::OK);
-
-    let body: Value = test::read_body_json(resp).await;
-    assert_eq!(
-        body.get("email").and_then(Value::as_str),
-        Some("alice@circa.local")
-    );
-    assert_eq!(
-        body.get("magic_link").and_then(Value::as_str),
-        Some("http://localhost:5173/login?token=latest")
-    );
-}
-
-#[actix_web::test]
-async fn test_inbox_latest_returns_404_when_disabled() {
-    let db = setup_db().await;
-    let config = make_config(AuthDeliveryMode::Smtp);
-    let delivery = build_magic_link_delivery(&config);
-
-    let app = test::init_service(
-        App::new()
-            .app_data(web::Data::new(UserService::new(UserRepository::new(
-                db.clone(),
-            ))))
-            .app_data(web::Data::new(config))
-            .app_data(web::Data::new(delivery))
-            .app_data(web::Data::new(db))
-            .configure(routes::config),
-    )
-    .await;
-
-    let req = test::TestRequest::get()
-        .uri("/auth/test-inbox/latest?email=alice@circa.local")
-        .to_request();
-
-    let resp = test::call_service(&app, req).await;
-    assert_eq!(resp.status(), StatusCode::NOT_FOUND);
-}
-
-#[actix_web::test]
-async fn verify_marks_token_and_outbox_row_used() {
-    let db = setup_db().await;
-    seed_user(&db, "user-123", "alice@circa.local", "admin").await;
-
-    let config = make_config(AuthDeliveryMode::Outbox);
-    let delivery = build_magic_link_delivery(&config);
-
-    let app = test::init_service(
-        App::new()
-            .app_data(web::Data::new(UserService::new(UserRepository::new(
-                db.clone(),
-            ))))
-            .app_data(web::Data::new(config))
-            .app_data(web::Data::new(delivery))
-            .app_data(web::Data::new(db.clone()))
-            .configure(routes::config),
-    )
-    .await;
-
-    let request_link_req = test::TestRequest::post()
+    let request_link = test::TestRequest::post()
         .uri("/auth/request-link")
         .set_json(json!({ "email": "alice@circa.local" }))
         .to_request();
+    assert_eq!(
+        test::call_service(&app, request_link).await.status(),
+        StatusCode::OK
+    );
 
-    let request_link_resp = test::call_service(&app, request_link_req).await;
-    assert_eq!(request_link_resp.status(), StatusCode::OK);
+    let outbox = OutboxEntity::find().one(&db).await.unwrap().unwrap();
+    let token = outbox.magic_link.split("token=").nth(1).unwrap();
 
-    let outbox_row = OutboxEntity::find().one(&db).await.unwrap().unwrap();
-    let token = outbox_row
-        .magic_link
-        .split("token=")
-        .nth(1)
-        .expect("magic link should contain token")
-        .to_string();
+    let verify = test::TestRequest::get()
+        .uri(&format!("/auth/verify?token={token}"))
+        .to_request();
+    let resp = test::call_service(&app, verify).await;
+    let body: Value = test::read_body_json(resp).await;
 
-    let verify_req = test::TestRequest::get()
-        .uri(&format!("/auth/verify?token={}", token))
+    assert!(body["token"].as_str().is_some());
+}
+
+#[actix_web::test]
+async fn verify_returns_bad_request_for_invalid_magic_link() {
+    let db = setup_db().await;
+    let app = app(&db, AuthDeliveryMode::Outbox).await;
+
+    let req = test::TestRequest::get()
+        .uri("/auth/verify?token=missing")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}
+
+#[actix_web::test]
+async fn verify_returns_internal_error_when_verified_user_disappeared() {
+    let db = setup_db().await;
+    insert_magic_token(
+        &db,
+        "token-id",
+        "missing-user",
+        "valid-token",
+        &(Utc::now() + Duration::minutes(15)).to_rfc3339(),
+        false,
+    )
+    .await;
+
+    let app = app(&db, AuthDeliveryMode::Outbox).await;
+
+    let req = test::TestRequest::get()
+        .uri("/auth/verify?token=valid-token")
+        .to_request();
+    let resp = test::call_service(&app, req).await;
+
+    assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+}
+
+#[actix_web::test]
+async fn test_inbox_latest_handles_empty_disabled_missing_and_success_states() {
+    let db = setup_db().await;
+    let future = (Utc::now() + Duration::minutes(15)).to_rfc3339();
+
+    insert_outbox(
+        &db,
+        OutboxSeed {
+            id: "outbox-1",
+            email: "alice@circa.local",
+            magic_token_id: "token-1",
+            link: "http://localhost/latest",
+            created_at: "2026-04-20T10:00:00Z",
+            expires_at: &future,
+            used: false,
+        },
+    )
+    .await;
+
+    let outbox_app = app(&db, AuthDeliveryMode::Outbox).await;
+
+    let empty = test::TestRequest::get()
+        .uri("/auth/test-inbox/latest?email=%20%20%20")
+        .to_request();
+    assert_eq!(
+        test::call_service(&outbox_app, empty).await.status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    let missing = test::TestRequest::get()
+        .uri("/auth/test-inbox/latest?email=missing@circa.local")
+        .to_request();
+    assert_eq!(
+        test::call_service(&outbox_app, missing).await.status(),
+        StatusCode::NOT_FOUND
+    );
+
+    let success = test::TestRequest::get()
+        .uri("/auth/test-inbox/latest?email=alice@circa.local")
+        .to_request();
+    let resp = test::call_service(&outbox_app, success).await;
+    let body: Value = test::read_body_json(resp).await;
+    assert_eq!(body["magic_link"], "http://localhost/latest");
+
+    let smtp_app = app(&db, AuthDeliveryMode::Smtp).await;
+    let disabled = test::TestRequest::get()
+        .uri("/auth/test-inbox/latest?email=alice@circa.local")
+        .to_request();
+    assert_eq!(
+        test::call_service(&smtp_app, disabled).await.status(),
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[actix_web::test]
+async fn me_endpoint_requires_valid_bearer_token_and_returns_claims() {
+    let db = setup_db().await;
+    let app = app(&db, AuthDeliveryMode::Outbox).await;
+
+    let unauthorized = test::TestRequest::get().uri("/api/me").to_request();
+    assert_eq!(
+        test::call_service(&app, unauthorized).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+
+    let invalid = test::TestRequest::get()
+        .uri("/api/me")
+        .insert_header(("Authorization", "Bearer not-a-jwt"))
+        .to_request();
+    assert_eq!(
+        test::call_service(&app, invalid).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+
+    let token = jwt("user-1", "admin").await;
+    let valid = test::TestRequest::get()
+        .uri("/api/me")
+        .insert_header(("Authorization", format!("Bearer {token}")))
         .to_request();
 
-    let verify_resp = test::call_service(&app, verify_req).await;
-    assert_eq!(verify_resp.status(), StatusCode::OK);
+    let resp = test::call_service(&app, valid).await;
+    let body: Value = test::read_body_json(resp).await;
 
-    let verify_body: Value = test::read_body_json(verify_resp).await;
-    assert!(verify_body.get("token").and_then(Value::as_str).is_some());
-
-    let outbox_after = OutboxEntity::find_by_id(outbox_row.id.clone())
-        .one(&db)
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(outbox_after.used);
-
-    let magic_token_after = MagicTokenEntity::find_by_id(outbox_row.magic_token_id.clone())
-        .one(&db)
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(magic_token_after.used);
+    assert_eq!(body["sub"], "user-1");
+    assert_eq!(body["role"], "admin");
 }

@@ -20,24 +20,47 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     );
 }
 
-async fn get_users(service: web::Data<UserService>) -> Result<HttpResponse, AppError> {
-    let users = service.get_users().await?;
+async fn get_users(
+    req: HttpRequest,
+    service: web::Data<UserService>,
+) -> Result<HttpResponse, AppError> {
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let users = service.get_users(&claims).await?;
     Ok(HttpResponse::Ok().json(users))
 }
 
 async fn create_user(
+    req: HttpRequest,
     service: web::Data<UserService>,
     body: web::Json<CreateUserRequest>,
 ) -> Result<HttpResponse, AppError> {
-    let user = service.create_user(body.into_inner()).await?;
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let user = service.create_user(body.into_inner(), &claims).await?;
     Ok(HttpResponse::Ok().json(user))
 }
 
 async fn get_user(
+    req: HttpRequest,
     service: web::Data<UserService>,
     path: web::Path<String>,
 ) -> Result<HttpResponse, AppError> {
-    let user = service.get_user(&path.into_inner()).await?;
+    let claims = req
+        .extensions()
+        .get::<Claims>()
+        .cloned()
+        .ok_or(AppError::Unauthorized)?;
+
+    let user = service.get_user(&path.into_inner(), &claims).await?;
     Ok(HttpResponse::Ok().json(user))
 }
 
@@ -71,5 +94,5 @@ async fn delete_user(
         .ok_or(AppError::Unauthorized)?;
 
     service.delete_user(&path.into_inner(), &claims).await?;
-    Ok(HttpResponse::Ok().body("User deleted successfully"))
+    Ok(HttpResponse::NoContent().finish())
 }

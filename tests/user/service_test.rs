@@ -1,269 +1,233 @@
-use circa_backend::auth::models::Claims;
-use circa_backend::user::{
-    entity::{Model, Role, Status},
-    models::{CreateUserRequest, UpdateUserRequest, UserRole},
-    repository::UserRepository,
-    service::UserService,
+use crate::common::{seed_user, setup_db};
+use circa_backend::{
+    auth::models::Claims,
+    user::{
+        entity::{Entity as UserEntity, Role, Status},
+        models::{CreateUserRequest, UpdateUserRequest, UserRole, UserStatus},
+        repository::UserRepository,
+        service::UserService,
+    },
 };
-use sea_orm::{DatabaseBackend, MockDatabase};
+use sea_orm::EntityTrait;
 
-fn make_claims(sub: &str, role: &str) -> Claims {
+fn claims(sub: &str, role: &str) -> Claims {
     Claims {
         sub: sub.to_string(),
         role: role.to_string(),
-        exp: 9999999999,
+        exp: 9_999_999_999,
     }
 }
 
-fn setup_mock_db_with_user() -> sea_orm::DatabaseConnection {
-    MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([vec![Model {
-            id: "1".to_string(),
-            name: "John".to_string(),
-            surname: "Doe".to_string(),
-            email: "john@example.com".to_string(),
-            phone: "123".to_string(),
-            role: Role::Organizer,
-            status: Status::Active,
-            availability_hours: "".to_string(),
-        }]])
-        .append_exec_results([sea_orm::MockExecResult {
-            last_insert_id: 1,
-            rows_affected: 1,
-        }])
-        .into_connection()
+async fn service() -> (sea_orm::DatabaseConnection, UserService) {
+    let db = setup_db().await;
+    seed_user(&db, "admin-1", "admin@circa.local", "admin", "active").await;
+    seed_user(&db, "user-1", "user@circa.local", "volunteer", "active").await;
+    let service = UserService::new(UserRepository::new(db.clone()));
+    (db, service)
 }
 
-// ── get_users ────────────────────────────────────────────────────────
+#[actix_web::test]
+async fn get_users_is_admin_only_and_returns_all_users() {
+    let (_db, service) = service().await;
 
-#[tokio::test]
-async fn test_get_users_success() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([vec![
-            Model {
-                id: "1".to_string(),
-                name: "John".to_string(),
-                surname: "Doe".to_string(),
-                email: "john@example.com".to_string(),
-                phone: "123".to_string(),
-                role: Role::Admin,
-                status: Status::Active,
-                availability_hours: "".to_string(),
-            },
-            Model {
-                id: "2".to_string(),
-                name: "Jane".to_string(),
-                surname: "Doe".to_string(),
-                email: "jane@example.com".to_string(),
-                phone: "456".to_string(),
-                role: Role::Volunteer,
-                status: Status::Active,
-                availability_hours: "".to_string(),
-            },
-        ]])
-        .into_connection();
+    let users = service
+        .get_users(&claims("admin-1", "admin"))
+        .await
+        .unwrap();
+    assert_eq!(users.len(), 2);
 
-    let service = UserService::new(UserRepository::new(db));
-    let result = service.get_users().await;
-
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap().len(), 2);
+    let err = service
+        .get_users(&claims("user-1", "volunteer"))
+        .await
+        .unwrap_err();
+    assert_eq!(err.to_string(), "Forbidden");
 }
 
-#[tokio::test]
-async fn test_get_users_empty() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([Vec::<Model>::new()])
-        .into_connection();
+#[actix_web::test]
+async fn get_user_allows_self_or_admin_and_rejects_other_users() {
+    let (_db, service) = service().await;
 
-    let service = UserService::new(UserRepository::new(db));
-    let result = service.get_users().await;
-
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap().len(), 0);
-}
-
-#[tokio::test]
-async fn test_get_users_db_failure() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
-
-    let service = UserService::new(UserRepository::new(db));
-    let result = service.get_users().await;
-
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Internal server error");
-}
-
-// ── get_user ─────────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn test_get_user_success() {
-    let db = setup_mock_db_with_user();
-    let service = UserService::new(UserRepository::new(db));
-
-    let result = service.get_user("1").await;
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap().id, "1");
-}
-
-#[tokio::test]
-async fn test_get_user_not_found() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([Vec::<Model>::new()])
-        .into_connection();
-    let service = UserService::new(UserRepository::new(db));
-
-    let result = service.get_user("999").await;
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Not found: User not found");
-}
-
-#[tokio::test]
-async fn test_get_user_db_failure() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
-
-    let service = UserService::new(UserRepository::new(db));
-    let result = service.get_user("1").await;
-
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Internal server error");
-}
-
-// ── get_user_by_email ────────────────────────────────────────────────
-
-#[tokio::test]
-async fn test_get_user_by_email_success() {
-    let db = setup_mock_db_with_user();
-    let service = UserService::new(UserRepository::new(db));
-
-    let result = service.get_user_by_email("john@example.com").await;
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap().email, "john@example.com");
-}
-
-#[tokio::test]
-async fn test_get_user_by_email_not_found() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([Vec::<Model>::new()])
-        .into_connection();
-    let service = UserService::new(UserRepository::new(db));
-
-    let result = service.get_user_by_email("nobody@example.com").await;
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Not found: User not found");
-}
-
-#[tokio::test]
-async fn test_get_user_by_email_db_failure() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
-
-    let service = UserService::new(UserRepository::new(db));
-    let result = service.get_user_by_email("john@example.com").await;
-
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Internal server error");
-}
-
-// ── create_user ──────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn test_create_user_success() {
-    let db = setup_mock_db_with_user();
-    let service = UserService::new(UserRepository::new(db));
-
-    let req = CreateUserRequest {
-        name: "John".to_string(),
-        surname: "Doe".to_string(),
-        email: "john@example.com".to_string(),
-        phone: "123".to_string(),
-        role: UserRole::Organizer,
-        availability_hours: "".to_string(),
-    };
-
-    let result = service.create_user(req).await;
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap().name, "John");
-}
-
-#[tokio::test]
-async fn test_create_user_empty_email() {
-    let db = setup_mock_db_with_user();
-    let service = UserService::new(UserRepository::new(db));
-
-    let req = CreateUserRequest {
-        name: "John".to_string(),
-        surname: "Doe".to_string(),
-        email: "".to_string(),
-        phone: "123".to_string(),
-        role: UserRole::Organizer,
-        availability_hours: "".to_string(),
-    };
-
-    let result = service.create_user(req).await;
-    assert!(result.is_err());
     assert_eq!(
-        result.unwrap_err().to_string(),
-        "Bad request: Email is required"
+        service
+            .get_user("user-1", &claims("user-1", "volunteer"))
+            .await
+            .unwrap()
+            .email,
+        "user@circa.local"
+    );
+    assert_eq!(
+        service
+            .get_user("user-1", &claims("admin-1", "admin"))
+            .await
+            .unwrap()
+            .id,
+        "user-1"
+    );
+    assert_eq!(
+        service
+            .get_user("user-1", &claims("other", "volunteer"))
+            .await
+            .unwrap_err()
+            .to_string(),
+        "Forbidden"
     );
 }
 
-#[tokio::test]
-async fn test_create_user_db_failure() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
+#[actix_web::test]
+async fn get_user_for_auth_and_email_lookup_bypass_request_claims() {
+    let (_db, service) = service().await;
 
-    let service = UserService::new(UserRepository::new(db));
+    assert_eq!(
+        service.get_user_for_auth("user-1").await.unwrap().id,
+        "user-1"
+    );
+    assert_eq!(
+        service
+            .get_user_by_email("user@circa.local")
+            .await
+            .unwrap()
+            .id,
+        "user-1"
+    );
 
-    let req = CreateUserRequest {
-        name: "John".to_string(),
-        surname: "Doe".to_string(),
-        email: "john@example.com".to_string(),
-        phone: "123".to_string(),
-        role: UserRole::Organizer,
-        availability_hours: "".to_string(),
-    };
-
-    let result = service.create_user(req).await;
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Internal server error");
+    assert_eq!(
+        service
+            .get_user_for_auth("missing")
+            .await
+            .unwrap_err()
+            .to_string(),
+        "Not found: User not found"
+    );
+    assert_eq!(
+        service
+            .get_user_by_email("missing@circa.local")
+            .await
+            .unwrap_err()
+            .to_string(),
+        "Not found: User not found"
+    );
 }
 
-// ── update_user ──────────────────────────────────────────────────────
+#[actix_web::test]
+async fn create_user_is_admin_only_and_validates_email() {
+    let (db, service) = service().await;
 
-#[tokio::test]
-async fn test_update_user_as_self() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([
-            vec![Model {
-                id: "1".to_string(),
-                name: "John".to_string(),
-                surname: "Doe".to_string(),
-                email: "john@example.com".to_string(),
-                phone: "123".to_string(),
-                role: Role::Volunteer,
-                status: Status::Active,
-                availability_hours: "".to_string(),
-            }],
-            vec![Model {
-                id: "1".to_string(),
-                name: "Jane".to_string(),
-                surname: "Doe".to_string(),
-                email: "john@example.com".to_string(),
-                phone: "123".to_string(),
-                role: Role::Volunteer,
-                status: Status::Active,
-                availability_hours: "".to_string(),
-            }],
-        ])
-        .append_exec_results([sea_orm::MockExecResult {
-            last_insert_id: 0,
-            rows_affected: 1,
-        }])
-        .into_connection();
-    let service = UserService::new(UserRepository::new(db));
-    let claims = make_claims("1", "volunteer");
+    let created = service
+        .create_user(
+            CreateUserRequest {
+                name: "Alice".to_string(),
+                surname: "Tester".to_string(),
+                email: "alice@circa.local".to_string(),
+                phone: "+48".to_string(),
+                role: UserRole::Organizer,
+                availability_hours: "[]".to_string(),
+            },
+            &claims("admin-1", "admin"),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(created.email, "alice@circa.local");
+    assert_eq!(UserEntity::find().all(&db).await.unwrap().len(), 3);
+
+    let forbidden = service
+        .create_user(
+            CreateUserRequest {
+                name: "Bob".to_string(),
+                surname: "Tester".to_string(),
+                email: "bob@circa.local".to_string(),
+                phone: "+48".to_string(),
+                role: UserRole::Staff,
+                availability_hours: "[]".to_string(),
+            },
+            &claims("user-1", "volunteer"),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(forbidden.to_string(), "Forbidden");
+
+    let invalid = service
+        .create_user(
+            CreateUserRequest {
+                name: "No".to_string(),
+                surname: "Email".to_string(),
+                email: "".to_string(),
+                phone: "+48".to_string(),
+                role: UserRole::Staff,
+                availability_hours: "[]".to_string(),
+            },
+            &claims("admin-1", "admin"),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(invalid.to_string(), "Bad request: Email is required");
+}
+
+#[actix_web::test]
+async fn update_user_allows_self_but_strips_privileged_fields_for_non_admins() {
+    let (db, service) = service().await;
+
+    let updated = service
+        .update_user(
+            "user-1",
+            UpdateUserRequest {
+                name: Some("Renamed".to_string()),
+                surname: Some("Updated".to_string()),
+                email: Some("renamed@circa.local".to_string()),
+                phone: Some("+123".to_string()),
+                role: Some(UserRole::Admin),
+                status: Some(UserStatus::Inactive),
+                availability_hours: Some("Fri".to_string()),
+            },
+            &claims("user-1", "volunteer"),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(updated.name, "Renamed");
+    assert_eq!(updated.role, UserRole::Volunteer);
+    assert_eq!(updated.status, UserStatus::Active);
+
+    let stored = UserEntity::find_by_id("user-1")
+        .one(&db)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.role, Role::Volunteer);
+    assert_eq!(stored.status, Status::Active);
+}
+
+#[actix_web::test]
+async fn update_user_admin_can_change_role_and_status() {
+    let (_db, service) = service().await;
+
+    let updated = service
+        .update_user(
+            "user-1",
+            UpdateUserRequest {
+                name: None,
+                surname: None,
+                email: None,
+                phone: None,
+                role: Some(UserRole::Staff),
+                status: Some(UserStatus::Inactive),
+                availability_hours: None,
+            },
+            &claims("admin-1", "admin"),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(updated.role, UserRole::Staff);
+    assert_eq!(updated.status, UserStatus::Inactive);
+}
+
+#[actix_web::test]
+async fn update_user_rejects_other_users_and_missing_records() {
+    let (_db, service) = service().await;
 
     let req = UpdateUserRequest {
-        name: Some("Jane".to_string()),
+        name: Some("Bad".to_string()),
         surname: None,
         email: None,
         phone: None,
@@ -272,279 +236,69 @@ async fn test_update_user_as_self() {
         availability_hours: None,
     };
 
-    let result = service.update_user("1", req, &claims).await;
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap().name, "Jane");
+    assert_eq!(
+        service
+            .update_user("user-1", req, &claims("other", "volunteer"))
+            .await
+            .unwrap_err()
+            .to_string(),
+        "Forbidden"
+    );
+
+    assert_eq!(
+        service
+            .update_user(
+                "missing",
+                UpdateUserRequest {
+                    name: Some("Missing".to_string()),
+                    surname: None,
+                    email: None,
+                    phone: None,
+                    role: None,
+                    status: None,
+                    availability_hours: None,
+                },
+                &claims("admin-1", "admin"),
+            )
+            .await
+            .unwrap_err()
+            .to_string(),
+        "Not found: User not found"
+    );
 }
 
-#[tokio::test]
-async fn test_update_user_as_admin() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([
-            vec![Model {
-                id: "2".to_string(),
-                name: "John".to_string(),
-                surname: "Doe".to_string(),
-                email: "john@example.com".to_string(),
-                phone: "123".to_string(),
-                role: Role::Volunteer,
-                status: Status::Active,
-                availability_hours: "".to_string(),
-            }],
-            vec![Model {
-                id: "2".to_string(),
-                name: "Jane".to_string(),
-                surname: "Doe".to_string(),
-                email: "john@example.com".to_string(),
-                phone: "123".to_string(),
-                role: Role::Volunteer,
-                status: Status::Active,
-                availability_hours: "".to_string(),
-            }],
-        ])
-        .append_exec_results([sea_orm::MockExecResult {
-            last_insert_id: 0,
-            rows_affected: 1,
-        }])
-        .into_connection();
-    let service = UserService::new(UserRepository::new(db));
-    let claims = make_claims("admin-id", "admin");
+#[actix_web::test]
+async fn delete_user_is_admin_only() {
+    let (db, service) = service().await;
 
-    let req = UpdateUserRequest {
-        name: Some("Jane".to_string()),
-        surname: None,
-        email: None,
-        phone: None,
-        role: None,
-        status: None,
-        availability_hours: None,
-    };
+    assert_eq!(
+        service
+            .delete_user("user-1", &claims("user-1", "volunteer"))
+            .await
+            .unwrap_err()
+            .to_string(),
+        "Forbidden"
+    );
 
-    let result = service.update_user("2", req, &claims).await;
-    assert!(result.is_ok());
-}
+    service
+        .delete_user("user-1", &claims("admin-1", "admin"))
+        .await
+        .unwrap();
 
-#[tokio::test]
-async fn test_update_user_as_organizer() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([
-            vec![Model {
-                id: "2".to_string(),
-                name: "John".to_string(),
-                surname: "Doe".to_string(),
-                email: "john@example.com".to_string(),
-                phone: "123".to_string(),
-                role: Role::Volunteer,
-                status: Status::Active,
-                availability_hours: "".to_string(),
-            }],
-            vec![Model {
-                id: "2".to_string(),
-                name: "Jane".to_string(),
-                surname: "Doe".to_string(),
-                email: "john@example.com".to_string(),
-                phone: "123".to_string(),
-                role: Role::Volunteer,
-                status: Status::Active,
-                availability_hours: "".to_string(),
-            }],
-        ])
-        .append_exec_results([sea_orm::MockExecResult {
-            last_insert_id: 0,
-            rows_affected: 1,
-        }])
-        .into_connection();
-    let service = UserService::new(UserRepository::new(db));
-    let claims = make_claims("org-id", "organizer");
+    assert!(
+        UserEntity::find_by_id("user-1")
+            .one(&db)
+            .await
+            .unwrap()
+            .is_none()
+    );
 
-    let req = UpdateUserRequest {
-        name: Some("Jane".to_string()),
-        surname: None,
-        email: None,
-        phone: None,
-        role: None,
-        status: None,
-        availability_hours: None,
-    };
-
-    let result = service.update_user("2", req, &claims).await;
-    assert!(result.is_ok());
-}
-
-#[tokio::test]
-async fn test_update_user_as_staff_forbidden() {
-    let db = setup_mock_db_with_user();
-    let service = UserService::new(UserRepository::new(db));
-    let claims = make_claims("staff-id", "staff");
-
-    let req = UpdateUserRequest {
-        name: Some("Hacked".to_string()),
-        surname: None,
-        email: None,
-        phone: None,
-        role: None,
-        status: None,
-        availability_hours: None,
-    };
-
-    let result = service.update_user("1", req, &claims).await;
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Forbidden");
-}
-
-#[tokio::test]
-async fn test_update_user_not_found() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_query_results([Vec::<Model>::new()])
-        .into_connection();
-    let service = UserService::new(UserRepository::new(db));
-    let claims = make_claims("admin-id", "admin");
-
-    let req = UpdateUserRequest {
-        name: Some("Ghost".to_string()),
-        surname: None,
-        email: None,
-        phone: None,
-        role: None,
-        status: None,
-        availability_hours: None,
-    };
-
-    let result = service.update_user("999", req, &claims).await;
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Not found: User not found");
-}
-
-#[tokio::test]
-async fn test_update_user_db_failure() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
-    let service = UserService::new(UserRepository::new(db));
-    let claims = make_claims("admin-id", "admin");
-
-    let req = UpdateUserRequest {
-        name: Some("Fail".to_string()),
-        surname: None,
-        email: None,
-        phone: None,
-        role: None,
-        status: None,
-        availability_hours: None,
-    };
-
-    let result = service.update_user("1", req, &claims).await;
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Internal server error");
-}
-
-#[tokio::test]
-async fn test_update_user_forbidden() {
-    let db = setup_mock_db_with_user();
-    let service = UserService::new(UserRepository::new(db));
-    let claims = make_claims("other-user", "volunteer");
-
-    let req = UpdateUserRequest {
-        name: Some("Hacked".to_string()),
-        surname: None,
-        email: None,
-        phone: None,
-        role: None,
-        status: None,
-        availability_hours: None,
-    };
-
-    let result = service.update_user("1", req, &claims).await;
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Forbidden");
-}
-
-// ── delete_user ──────────────────────────────────────────────────────
-
-#[tokio::test]
-async fn test_delete_user_as_self() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_exec_results([sea_orm::MockExecResult {
-            last_insert_id: 0,
-            rows_affected: 1,
-        }])
-        .into_connection();
-    let service = UserService::new(UserRepository::new(db));
-    let claims = make_claims("1", "volunteer");
-
-    let result = service.delete_user("1", &claims).await;
-    assert!(result.is_ok());
-}
-
-#[tokio::test]
-async fn test_delete_user_as_admin() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_exec_results([sea_orm::MockExecResult {
-            last_insert_id: 0,
-            rows_affected: 1,
-        }])
-        .into_connection();
-    let service = UserService::new(UserRepository::new(db));
-    let claims = make_claims("admin-id", "admin");
-
-    let result = service.delete_user("1", &claims).await;
-    assert!(result.is_ok());
-}
-
-#[tokio::test]
-async fn test_delete_user_forbidden() {
-    let db = setup_mock_db_with_user();
-    let service = UserService::new(UserRepository::new(db));
-    let claims = make_claims("other-user", "volunteer");
-
-    let result = service.delete_user("1", &claims).await;
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Forbidden");
-}
-
-#[tokio::test]
-async fn test_delete_user_forbidden_as_organizer() {
-    let db = setup_mock_db_with_user();
-    let service = UserService::new(UserRepository::new(db));
-    let claims = make_claims("org-id", "organizer");
-
-    let result = service.delete_user("1", &claims).await;
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Forbidden");
-}
-
-#[tokio::test]
-async fn test_delete_user_as_staff_forbidden() {
-    let db = setup_mock_db_with_user();
-    let service = UserService::new(UserRepository::new(db));
-    let claims = make_claims("staff-id", "staff");
-
-    let result = service.delete_user("1", &claims).await;
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Forbidden");
-}
-
-#[tokio::test]
-async fn test_delete_user_db_failure() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite).into_connection();
-    let service = UserService::new(UserRepository::new(db));
-    let claims = make_claims("admin-id", "admin");
-
-    let result = service.delete_user("1", &claims).await;
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Internal server error");
-}
-
-#[tokio::test]
-async fn test_delete_user_not_found() {
-    let db = MockDatabase::new(DatabaseBackend::Sqlite)
-        .append_exec_results([sea_orm::MockExecResult {
-            last_insert_id: 0,
-            rows_affected: 0,
-        }])
-        .into_connection();
-    let service = UserService::new(UserRepository::new(db));
-    let claims = make_claims("1", "admin");
-
-    let result = service.delete_user("1", &claims).await;
-    assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Not found: User not found");
+    assert_eq!(
+        service
+            .delete_user("missing", &claims("admin-1", "admin"))
+            .await
+            .unwrap_err()
+            .to_string(),
+        "Not found: User not found"
+    );
 }

@@ -77,7 +77,7 @@ async fn verify(
         Err(e) => return HttpResponse::BadRequest().body(e.to_string()),
     };
 
-    let user = match user_service.get_user(&user_id).await {
+    let user = match user_service.get_user_for_auth(&user_id).await {
         Ok(u) => u,
         Err(_) => {
             return HttpResponse::InternalServerError().body("User not found after verification");
