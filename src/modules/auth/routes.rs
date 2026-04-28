@@ -27,9 +27,9 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
     let auth_middleware = HttpAuthentication::bearer(jwt_validator);
     cfg.service(
-        web::scope("")
+        web::scope("/me")
             .wrap(auth_middleware)
-            .route("/me", web::get().to(get_current_user)),
+            .route("", web::get().to(get_current_user)),
     );
 }
 
