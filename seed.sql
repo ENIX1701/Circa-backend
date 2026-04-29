@@ -222,8 +222,8 @@ INSERT INTO magic_tokens (id, user_id, token, expires_at, used) VALUES
     ('019c8555-7a32-7aaa-8000-000000000202', '019c8555-7a32-7972-8961-f2c2b29ebd22', 'dev-bob-used-magic-token', '2026-12-31T23:59:59Z', 1);
 
 INSERT INTO magic_link_outbox (id, email, magic_token_id, magic_link, created_at, expires_at, used) VALUES
-    ('019c8555-7a32-7aaa-8000-000000000211', 'alice@circa.local', '019c8555-7a32-7aaa-8000-000000000201', 'http://localhost:5173/auth/verify?token=dev-alice-magic-token', '2026-04-25T12:00:00Z', '2026-12-31T23:59:59Z', 0),
-    ('019c8555-7a32-7aaa-8000-000000000212', 'bob@circa.local', '019c8555-7a32-7aaa-8000-000000000202', 'http://localhost:5173/auth/verify?token=dev-bob-used-magic-token', '2026-04-25T12:05:00Z', '2026-12-31T23:59:59Z', 1);
+    ('019c8555-7a32-7aaa-8000-000000000211', 'alice@circa.local', '019c8555-7a32-7aaa-8000-000000000201', '/login?token=dev-alice-magic-token', '2026-04-25T12:00:00Z', '2026-12-31T23:59:59Z', 0),
+    ('019c8555-7a32-7aaa-8000-000000000212', 'bob@circa.local', '019c8555-7a32-7aaa-8000-000000000202', '/login?token=dev-bob-used-magic-token', '2026-04-25T12:05:00Z', '2026-12-31T23:59:59Z', 1);
 
 -- === seed events ===
 INSERT INTO events (
