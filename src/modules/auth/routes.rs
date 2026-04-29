@@ -40,13 +40,13 @@ async fn request_magic_link(
     config: web::Data<Config>,
     delivery: web::Data<Arc<dyn MagicLinkDelivery>>,
 ) -> Result<HttpResponse, AppError> {
-    let email = body.email.trim();
+    let email = body.email.trim().to_lowercase();
 
     if email.is_empty() {
         return Err(AppError::BadRequest("Email is required".to_string()));
     }
 
-    let user = match user_service.get_user_by_email(email).await {
+    let user = match user_service.get_user_by_email(&email).await {
         Ok(user) => Some(user),
         Err(AppError::NotFound(_)) => None,
         Err(err) => return Err(err),
