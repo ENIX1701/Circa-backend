@@ -11,6 +11,7 @@ use super::{
 };
 use crate::error::AppError;
 use chrono::{DateTime, Utc};
+use chrono_tz::Tz;
 
 pub struct EventService {
     repository: EventRepository,
@@ -42,6 +43,24 @@ impl EventService {
             .ok_or_else(|| AppError::NotFound("Event not found".to_string()))?;
 
         Ok(Event::from_parts(event, role))
+    }
+
+    pub async fn is_slug_available(&self, slug: &str) -> Result<bool, AppError> {
+        let slug = slug.trim();
+
+        if slug.is_empty() {
+            return Err(AppError::BadRequest(
+                "Event slug is required >:c".to_string(),
+            ));
+        }
+
+        if !is_valid_slug(slug) {
+            return Err(AppError::BadRequest(
+                "Event slug must contain lowercase letters, numbers and hyphens only!".to_string(),
+            ));
+        }
+
+        Ok(!self.repository.slug_exists(slug).await?)
     }
 
     pub async fn create_event(
@@ -523,6 +542,12 @@ impl EventService {
             return Err(AppError::BadRequest("Timezone is required".to_string()));
         }
 
+        if req.timezone.trim().parse::<Tz>().is_err() {
+            return Err(AppError::BadRequest(
+                "Timezone must be a valid IANA timezone".to_string(),
+            ));
+        }
+
         let starts_at = DateTime::parse_from_rfc3339(&req.starts_at).map_err(|_| {
             AppError::BadRequest("starts_at must be a valid RFC3339 datetime".to_string())
         })?;
@@ -534,6 +559,12 @@ impl EventService {
         if starts_at >= ends_at {
             return Err(AppError::BadRequest(
                 "ends_at must be later than starts_at".to_string(),
+            ));
+        }
+
+        if ends_at.with_timezone(&Utc) <= Utc::now() {
+            return Err(AppError::BadRequest(
+                "ends_at cannot be in the past".to_string(),
             ));
         }
 
@@ -881,9 +912,15 @@ impl EventService {
 }
 
 fn is_valid_slug(value: &str) -> bool {
-    value
-        .chars()
-        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    let value = value.trim();
+
+    !value.is_empty()
+        && !value.starts_with('-')
+        && !value.ends_with('-')
+        && !value.contains("--")
+        && value
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
 }
 
 fn is_valid_hex_color(value: &str) -> bool {

@@ -155,6 +155,16 @@ pub struct UpdateEventCollaboratorRequest {
     pub role: EventMembershipRole,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct SlugAvailabilityQuery {
+    pub slug: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SlugAvailabilityResponse {
+    pub available: bool,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct CreateEventRequest {
     pub name: String,

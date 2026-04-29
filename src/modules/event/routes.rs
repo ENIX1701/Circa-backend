@@ -8,8 +8,8 @@ use crate::{
     event::{
         models::{
             AddEventCollaboratorRequest, CreateEventRequest, CreatePlannerItemRequest,
-            CreatePlannerTimelineItemRequest, CreateSocialMediaPostRequest,
-            UpdateEventCollaboratorRequest, UpdatePlannerItemRequest,
+            CreatePlannerTimelineItemRequest, CreateSocialMediaPostRequest, SlugAvailabilityQuery,
+            SlugAvailabilityResponse, UpdateEventCollaboratorRequest, UpdatePlannerItemRequest,
             UpdatePlannerTimelineItemRequest, UpdateSocialMediaPostRequest,
             UpsertEventBrandingRequest,
         },
@@ -25,6 +25,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .wrap(auth_middleware)
             .route("", web::get().to(get_events))
             .route("", web::post().to(create_event))
+            .route("/slug-availability", web::get().to(check_slug_availability))
             .route("/{id}", web::get().to(get_event))
             .route("/{id}/activate", web::post().to(activate_event))
             .route("/{id}/close", web::post().to(close_event))
@@ -122,6 +123,14 @@ async fn create_event(
 
     let event = service.create_event(body.into_inner(), &claims.sub).await?;
     Ok(HttpResponse::Ok().json(event))
+}
+
+async fn check_slug_availability(
+    service: web::Data<EventService>,
+    query: web::Query<SlugAvailabilityQuery>,
+) -> Result<HttpResponse, AppError> {
+    let available = service.is_slug_available(&query.slug).await?;
+    Ok(HttpResponse::Ok().json(SlugAvailabilityResponse { available }))
 }
 
 async fn get_event(

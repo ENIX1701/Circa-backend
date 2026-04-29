@@ -221,6 +221,16 @@ impl EventRepository {
         Ok(event.map(|event| (event, membership.role)))
     }
 
+    pub async fn slug_exists(&self, slug: &str) -> Result<bool, AppError> {
+        let existing = EventEntity::find()
+            .filter(entity::Column::Slug.eq(slug))
+            .one(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)?;
+
+        Ok(existing.is_some())
+    }
+
     pub async fn create(
         &self,
         dto: CreateEventRequest,
