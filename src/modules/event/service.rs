@@ -75,8 +75,6 @@ impl EventService {
     }
 
     pub async fn activate_event(&self, event_id: &str, user_id: &str) -> Result<Event, AppError> {
-        self.require_owner(event_id, user_id).await?;
-
         let event = self.require_owner(event_id, user_id).await?;
         if event.status != entity::Status::Draft {
             return Err(AppError::BadRequest(
@@ -93,8 +91,6 @@ impl EventService {
     }
 
     pub async fn close_event(&self, event_id: &str, user_id: &str) -> Result<Event, AppError> {
-        self.require_owner(event_id, user_id).await?;
-
         let event = self.require_owner(event_id, user_id).await?;
         if event.status != entity::Status::Active {
             return Err(AppError::BadRequest(
@@ -115,10 +111,8 @@ impl EventService {
         event_id: &str,
         user_id: &str,
     ) -> Result<Event, AppError> {
-        self.require_owner(event_id, user_id).await?;
-
-        let current = self.get_event_for_user(event_id, user_id).await?;
-        if !matches!(current.status, super::models::EventStatus::Closed) {
+        let event = self.require_owner(event_id, user_id).await?;
+        if event.status != entity::Status::Closed {
             return Err(AppError::BadRequest(
                 "Only closed events ca nenter pending destruction".to_string(),
             ));
@@ -127,7 +121,7 @@ impl EventService {
         let updated = self
             .repository
             .update_status(
-                event_id,
+                &event.id,
                 entity::Status::PendingDestruction,
                 Some(Utc::now().to_rfc3339()),
             )
@@ -141,12 +135,8 @@ impl EventService {
         event_id: &str,
         user_id: &str,
     ) -> Result<Event, AppError> {
-        self.require_owner(event_id, user_id).await?;
-
         let event = self.require_owner(event_id, user_id).await?;
-        if event.status != entity::Status::Closed
-            && event.status != entity::Status::PendingDestruction
-        {
+        if event.status != entity::Status::PendingDestruction {
             return Err(AppError::BadRequest(
                 "Only pending destruction events can be restored to closed".to_string(),
             ));
@@ -161,13 +151,10 @@ impl EventService {
     }
 
     pub async fn archive_event(&self, event_id: &str, user_id: &str) -> Result<Event, AppError> {
-        self.require_owner(event_id, user_id).await?;
-
-        let current = self.get_event_for_user(event_id, user_id).await?;
-        if !matches!(
-            current.status,
-            super::models::EventStatus::Closed | super::models::EventStatus::PendingDestruction
-        ) {
+        let event = self.require_owner(event_id, user_id).await?;
+        if event.status != entity::Status::Closed
+            && event.status != entity::Status::PendingDestruction
+        {
             return Err(AppError::BadRequest(
                 "Only closed or pending destruction events can be archived :c".to_string(),
             ));
@@ -175,7 +162,7 @@ impl EventService {
 
         let updated = self
             .repository
-            .update_status(event_id, entity::Status::Archived, None)
+            .update_status(&event.id, entity::Status::Archived, None)
             .await?;
 
         Ok(Event::from_parts(updated, membership_entity::Role::Owner))
@@ -225,8 +212,7 @@ impl EventService {
         user_id: &str,
         req: AddEventCollaboratorRequest,
     ) -> Result<EventCollaborator, AppError> {
-        self.require_owner(event_id, user_id).await?;
-
+        let event = self.require_owner(event_id, user_id).await?;
         let email = req.email.trim().to_lowercase();
 
         if email.is_empty() {
@@ -241,7 +227,7 @@ impl EventService {
 
         let membership = self
             .repository
-            .add_membership(event_id, &user.id, req.role.into())
+            .add_membership(&event.id, &user.id, req.role.into())
             .await?;
 
         Ok(EventCollaborator::from_parts(membership, user))
