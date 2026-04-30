@@ -202,23 +202,39 @@ impl EventRepository {
             .map_err(|_| AppError::InternalServerError)
     }
 
+    pub async fn find_event_by_ref(
+        &self,
+        event_ref: &str,
+    ) -> Result<Option<entity::Model>, AppError> {
+        if let Some(event) = EventEntity::find_by_id(event_ref.to_string())
+            .one(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)?
+        {
+            return Ok(Some(event));
+        }
+
+        EventEntity::find()
+            .filter(entity::Column::Slug.eq(event_ref))
+            .one(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)
+    }
+
     pub async fn find_for_user(
         &self,
-        event_id: &str,
+        event_ref: &str,
         user_id: &str,
     ) -> Result<Option<(entity::Model, membership_entity::Role)>, AppError> {
-        let membership = self.find_membership(event_id, user_id).await?;
-
-        let Some(membership) = membership else {
+        let Some(event) = self.find_event_by_ref(event_ref).await? else {
             return Ok(None);
         };
 
-        let event = EventEntity::find_by_id(event_id.to_string())
-            .one(&self.db)
-            .await
-            .map_err(|_| AppError::InternalServerError)?;
+        let Some(membership) = self.find_membership(&event.id, user_id).await? else {
+            return Ok(None);
+        };
 
-        Ok(event.map(|event| (event, membership.role)))
+        Ok(Some((event, membership.role)))
     }
 
     pub async fn slug_exists(&self, slug: &str) -> Result<bool, AppError> {
