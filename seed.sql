@@ -338,6 +338,29 @@ INSERT INTO event_memberships (id, event_id, user_id, role, created_at) VALUES
     ('00000000-0000-7000-8000-000000000445', '00000000-0000-7000-8000-000000000107', '00000000-0000-7000-8000-000000000014', 'volunteer', '2026-04-18T16:40:00Z'),
     ('00000000-0000-7000-8000-000000000446', '00000000-0000-7000-8000-000000000107', '00000000-0000-7000-8000-000000000018', 'volunteer', '2026-04-18T16:45:00Z');
 
+-- Scale the flagship launch event to the full visible demo roster.
+INSERT INTO event_memberships (id, event_id, user_id, role, created_at) VALUES
+    ('00000000-0000-7000-8000-000000000447', '00000000-0000-7000-8000-000000000101', '00000000-0000-7000-8000-000000000003', 'organizer', '2026-04-10T12:40:00Z'),
+    ('00000000-0000-7000-8000-000000000448', '00000000-0000-7000-8000-000000000101', '00000000-0000-7000-8000-000000000004', 'organizer', '2026-04-10T12:45:00Z'),
+    ('00000000-0000-7000-8000-000000000449', '00000000-0000-7000-8000-000000000101', '00000000-0000-7000-8000-000000000007', 'staff', '2026-04-10T12:50:00Z'),
+    ('00000000-0000-7000-8000-000000000450', '00000000-0000-7000-8000-000000000101', '00000000-0000-7000-8000-000000000009', 'staff', '2026-04-10T12:55:00Z'),
+    ('00000000-0000-7000-8000-000000000451', '00000000-0000-7000-8000-000000000101', '00000000-0000-7000-8000-000000000010', 'staff', '2026-04-10T13:00:00Z'),
+    ('00000000-0000-7000-8000-000000000452', '00000000-0000-7000-8000-000000000101', '00000000-0000-7000-8000-000000000013', 'volunteer', '2026-04-10T13:05:00Z'),
+    ('00000000-0000-7000-8000-000000000453', '00000000-0000-7000-8000-000000000101', '00000000-0000-7000-8000-000000000014', 'volunteer', '2026-04-10T13:10:00Z'),
+    ('00000000-0000-7000-8000-000000000454', '00000000-0000-7000-8000-000000000101', '00000000-0000-7000-8000-000000000015', 'volunteer', '2026-04-10T13:15:00Z'),
+    ('00000000-0000-7000-8000-000000000455', '00000000-0000-7000-8000-000000000101', '00000000-0000-7000-8000-000000000017', 'organizer', '2026-04-10T13:20:00Z'),
+    ('00000000-0000-7000-8000-000000000456', '00000000-0000-7000-8000-000000000101', '00000000-0000-7000-8000-000000000018', 'volunteer', '2026-04-10T13:25:00Z'),
+    ('00000000-0000-7000-8000-000000000457', '00000000-0000-7000-8000-000000000101', '00000000-0000-7000-8000-000000000019', 'staff', '2026-04-10T13:30:00Z'),
+    ('00000000-0000-7000-8000-000000000458', '00000000-0000-7000-8000-000000000101', '00000000-0000-7000-8000-000000000020', 'volunteer', '2026-04-10T13:35:00Z');
+
+-- Scale APAC Developer Week to a medium-sized visible team.
+INSERT INTO event_memberships (id, event_id, user_id, role, created_at) VALUES
+    ('00000000-0000-7000-8000-000000000459', '00000000-0000-7000-8000-000000000103', '00000000-0000-7000-8000-000000000002', 'organizer', '2026-04-14T08:20:00Z'),
+    ('00000000-0000-7000-8000-000000000460', '00000000-0000-7000-8000-000000000103', '00000000-0000-7000-8000-000000000005', 'staff', '2026-04-14T08:25:00Z'),
+    ('00000000-0000-7000-8000-000000000461', '00000000-0000-7000-8000-000000000103', '00000000-0000-7000-8000-000000000006', 'staff', '2026-04-14T08:30:00Z'),
+    ('00000000-0000-7000-8000-000000000462', '00000000-0000-7000-8000-000000000103', '00000000-0000-7000-8000-000000000011', 'volunteer', '2026-04-14T08:35:00Z'),
+    ('00000000-0000-7000-8000-000000000463', '00000000-0000-7000-8000-000000000103', '00000000-0000-7000-8000-000000000014', 'volunteer', '2026-04-14T08:40:00Z');
+
 INSERT INTO event_branding (
     id, event_id, event_name_override, tagline, primary_color, secondary_color,
     theme_mode, background_color, notes, created_at, updated_at
@@ -397,6 +420,82 @@ INSERT INTO planner_items (id, event_id, title, notes, position, done, created_a
     ('00000000-0000-7000-8000-000000000643', '00000000-0000-7000-8000-000000000107', 'Define completion certificate rules', 'Confirm attendance threshold, exercise submission, and name-format policy.', 5, 1, '2026-04-18T16:20:00Z', '2026-04-29T16:00:00Z'),
     ('00000000-0000-7000-8000-000000000644', '00000000-0000-7000-8000-000000000107', 'Test backup facilitation channel', 'Validate chat bridge, phone bridge, status page, and moderator escalation flow.', 6, 0, '2026-04-18T16:20:00Z', '2026-04-30T08:35:00Z');
 
+-- Generated scale checklist: Global Product Launch Summit reaches 100 planner items.
+WITH RECURSIVE launch_planner(n) AS (
+    SELECT 9
+    UNION ALL
+    SELECT n + 1 FROM launch_planner WHERE n < 100
+)
+INSERT INTO planner_items (id, event_id, title, notes, position, done, created_at, updated_at)
+SELECT
+    printf('00000000-0000-7000-8000-000000001%03d', n),
+    '00000000-0000-7000-8000-000000000101',
+    CASE (n % 12)
+        WHEN 0 THEN 'Audit launch room readiness '
+        WHEN 1 THEN 'Review executive briefing card '
+        WHEN 2 THEN 'Confirm sponsor delivery package '
+        WHEN 3 THEN 'Prepare attendee support note '
+        WHEN 4 THEN 'Validate production cue '
+        WHEN 5 THEN 'Check translation and captions lane '
+        WHEN 6 THEN 'Coordinate security checkpoint '
+        WHEN 7 THEN 'Update partner success tracker '
+        WHEN 8 THEN 'Verify demo pod equipment '
+        WHEN 9 THEN 'Refresh press-room queue '
+        WHEN 10 THEN 'Confirm VIP transport detail '
+        ELSE 'Reconcile post-event export item '
+    END || printf('%03d', n),
+    CASE (n % 8)
+        WHEN 0 THEN 'Generated scale item for venue, production, sponsor, and support operations.'
+        WHEN 1 THEN 'Confirm owner, backup owner, deadline, and onsite escalation path before the public demo.'
+        WHEN 2 THEN 'Keep this visible in planner exports to show dense checklist behavior at enterprise scale.'
+        WHEN 3 THEN 'Use for sorting, completion, and high-volume checklist scanning during stakeholder walkthroughs.'
+        WHEN 4 THEN 'Cross-check dependencies with production, partner, security, and accessibility leads.'
+        WHEN 5 THEN 'Ready for bulk editing demos, status review, and end-of-day operations standup.'
+        WHEN 6 THEN 'Representative launch detail spanning global attendee support and partner operations.'
+        ELSE 'Retained as a realistic non-critical item so the list has a deep operational tail.'
+    END,
+    n,
+    CASE WHEN n % 5 = 0 THEN 1 ELSE 0 END,
+    '2026-04-30T09:00:00Z',
+    '2026-04-30T09:00:00Z'
+FROM launch_planner;
+
+-- Generated medium checklist: APAC Developer Week reaches 50 planner items.
+WITH RECURSIVE apac_planner(n) AS (
+    SELECT 9
+    UNION ALL
+    SELECT n + 1 FROM apac_planner WHERE n < 50
+)
+INSERT INTO planner_items (id, event_id, title, notes, position, done, created_at, updated_at)
+SELECT
+    printf('00000000-0000-7000-8000-000000003%03d', n),
+    '00000000-0000-7000-8000-000000000103',
+    CASE (n % 10)
+        WHEN 0 THEN 'Confirm lab capacity block '
+        WHEN 1 THEN 'Prepare maintainer speaker note '
+        WHEN 2 THEN 'Review workshop repository '
+        WHEN 3 THEN 'Validate community desk coverage '
+        WHEN 4 THEN 'Check scholarship attendee support '
+        WHEN 5 THEN 'Coordinate mentor office-hour slot '
+        WHEN 6 THEN 'Publish developer track update '
+        WHEN 7 THEN 'Test multilingual caption workflow '
+        WHEN 8 THEN 'Audit sponsor engineer booth '
+        ELSE 'Package post-event code sample '
+    END || printf('%03d', n),
+    CASE (n % 6)
+        WHEN 0 THEN 'Medium-scale generated item for workshop operations and community programming.'
+        WHEN 1 THEN 'Designed to make planner lists feel busy without overwhelming the APAC event.'
+        WHEN 2 THEN 'Check facilitator readiness, attendee prerequisites, and room ownership.'
+        WHEN 3 THEN 'Useful for demonstrating filters, completion state, and dense exports.'
+        WHEN 4 THEN 'Coordinate with track leads, hallway hosts, and volunteer mentors.'
+        ELSE 'Keep as a realistic operational follow-up for Developer Week planning.'
+    END,
+    n,
+    CASE WHEN n % 6 = 0 THEN 1 ELSE 0 END,
+    '2026-04-30T09:10:00Z',
+    '2026-04-30T09:10:00Z'
+FROM apac_planner;
+
 -- === planner timeline / gantt data ===
 INSERT INTO planner_timeline_items (
     id, event_id, title, item_type, starts_at, ends_at, status, owner,
@@ -450,6 +549,217 @@ INSERT INTO planner_timeline_items (
     ('00000000-0000-7000-8000-000000000746', '00000000-0000-7000-8000-000000000107', 'Regional watch-room staffing', 'task', '2026-10-29T09:00:00Z', '2026-11-03T18:00:00Z', 'in_progress', 'Grace Kim', 'Confirm Americas, EMEA, and APAC hosts plus backup moderators.', '#14B8A6', 4, '2026-04-18T16:20:00Z', '2026-04-30T08:35:00Z', '', '00000000-0000-7000-8000-000000000011'),
     ('00000000-0000-7000-8000-000000000747', '00000000-0000-7000-8000-000000000107', 'Backup channel test', 'task', '2026-11-02T14:00:00Z', '2026-11-02T16:00:00Z', 'blocked', 'Lucas Brown', 'Waiting for phone bridge provisioning from vendor.', '#DC2626', 5, '2026-04-18T16:20:00Z', '2026-04-30T08:35:00Z', '', '00000000-0000-7000-8000-000000000014'),
     ('00000000-0000-7000-8000-000000000748', '00000000-0000-7000-8000-000000000107', 'Masterclass live', 'milestone', '2026-11-04T10:00:00Z', '2026-11-04T10:00:00Z', 'planned', 'Oliver Grant', 'Main digital room opens with global support active.', '#F97316', 6, '2026-04-18T16:20:00Z', '2026-04-30T08:35:00Z', '00000000-0000-7000-8000-000000000745', '00000000-0000-7000-8000-000000000002');
+
+-- Generated scale timeline: Global Product Launch Summit reaches 100 timeline items.
+WITH RECURSIVE launch_timeline(n) AS (
+    SELECT 13
+    UNION ALL
+    SELECT n + 1 FROM launch_timeline WHERE n < 100
+)
+INSERT INTO planner_timeline_items (
+    id, event_id, title, item_type, starts_at, ends_at, status, owner,
+    notes, color, position, created_at, updated_at, depends_on_item_id, assigned_user_id
+)
+SELECT
+    printf('00000000-0000-7000-8000-000000002%03d', n),
+    '00000000-0000-7000-8000-000000000101',
+    CASE (n % 14)
+        WHEN 0 THEN 'Registration surge lane '
+        WHEN 1 THEN 'Partner demo support block '
+        WHEN 2 THEN 'Executive movement window '
+        WHEN 3 THEN 'Press interview rotation '
+        WHEN 4 THEN 'Accessibility support shift '
+        WHEN 5 THEN 'Sponsor booth QA sweep '
+        WHEN 6 THEN 'Livestream monitoring pass '
+        WHEN 7 THEN 'Customer advisory prep '
+        WHEN 8 THEN 'Security briefing cycle '
+        WHEN 9 THEN 'Catering service checkpoint '
+        WHEN 10 THEN 'Product demo reset '
+        WHEN 11 THEN 'Attendee help desk shift '
+        WHEN 12 THEN 'Venue operations review '
+        ELSE 'Post-launch export handoff '
+    END || printf('%03d', n),
+    CASE WHEN n % 17 = 0 THEN 'milestone' WHEN n % 5 = 0 THEN 'asset' ELSE 'task' END,
+    date('2026-06-10', '+' || (n % 9) || ' day') || printf('T%02d:00:00-07:00', 8 + (n % 8)),
+    CASE
+        WHEN n % 17 = 0 THEN date('2026-06-10', '+' || (n % 9) || ' day') || printf('T%02d:00:00-07:00', 8 + (n % 8))
+        ELSE date('2026-06-10', '+' || ((n % 9) + CASE WHEN n % 4 = 0 THEN 2 ELSE 0 END) || ' day') || 'T18:00:00-07:00'
+    END,
+    CASE WHEN n % 13 = 0 THEN 'done' WHEN n % 11 = 0 THEN 'blocked' WHEN n % 7 = 0 THEN 'in_progress' ELSE 'planned' END,
+    CASE WHEN n % 4 = 0 THEN 'Unassigned launch queue' ELSE
+        CASE (n % 20)
+            WHEN 0 THEN 'Sam Rivera'
+            WHEN 1 THEN 'Maya Chen'
+            WHEN 2 THEN 'Oliver Grant'
+            WHEN 3 THEN 'Priya Nair'
+            WHEN 4 THEN 'Daniel Okafor'
+            WHEN 5 THEN 'Sofia Marin'
+            WHEN 6 THEN 'Liam Connor'
+            WHEN 7 THEN 'Amina Hassan'
+            WHEN 8 THEN 'Noah Smith'
+            WHEN 9 THEN 'Elena Rossi'
+            WHEN 10 THEN 'Kenji Tanaka'
+            WHEN 11 THEN 'Grace Kim'
+            WHEN 12 THEN 'Mateo Silva'
+            WHEN 13 THEN 'Aisha Khan'
+            WHEN 14 THEN 'Lucas Brown'
+            WHEN 15 THEN 'Emma Hughes'
+            WHEN 16 THEN 'Fatima Al-Sayed'
+            WHEN 17 THEN 'Julien Martin'
+            WHEN 18 THEN 'Wei Zhang'
+            ELSE 'Hannah Mueller'
+        END
+    END,
+    CASE (n % 7)
+        WHEN 0 THEN 'Generated dense workload item for enterprise-scale launch staffing.'
+        WHEN 1 THEN 'Visible in the Staff dashboard to test assignment spread, blocked state, and open workload.'
+        WHEN 2 THEN 'Representative onsite operation with owner, color, schedule, dependency, and status.'
+        WHEN 3 THEN 'Useful for Gantt density, horizontal scrolling, and bulk timeline review demos.'
+        WHEN 4 THEN 'Covers sponsor, executive, press, accessibility, and support flows across launch week.'
+        WHEN 5 THEN 'Designed to look realistic without requiring extra schema or frontend changes.'
+        ELSE 'Includes intentionally mixed assignments so the workload panel shows both people and queues.'
+    END,
+    CASE (n % 10)
+        WHEN 0 THEN '#0057D9'
+        WHEN 1 THEN '#FFB000'
+        WHEN 2 THEN '#10B981'
+        WHEN 3 THEN '#0EA5E9'
+        WHEN 4 THEN '#7C3AED'
+        WHEN 5 THEN '#F97316'
+        WHEN 6 THEN '#14B8A6'
+        WHEN 7 THEN '#6366F1'
+        WHEN 8 THEN '#64748B'
+        ELSE '#DC2626'
+    END,
+    n,
+    '2026-04-30T09:20:00Z',
+    '2026-04-30T09:20:00Z',
+    CASE WHEN n > 13 AND n % 3 = 0 THEN printf('00000000-0000-7000-8000-000000002%03d', n - 1) ELSE '' END,
+    CASE WHEN n % 4 = 0 THEN '' ELSE
+        CASE (n % 20)
+            WHEN 0 THEN '00000000-0000-7000-8000-000000000020'
+            WHEN 1 THEN '00000000-0000-7000-8000-000000000001'
+            WHEN 2 THEN '00000000-0000-7000-8000-000000000002'
+            WHEN 3 THEN '00000000-0000-7000-8000-000000000003'
+            WHEN 4 THEN '00000000-0000-7000-8000-000000000004'
+            WHEN 5 THEN '00000000-0000-7000-8000-000000000005'
+            WHEN 6 THEN '00000000-0000-7000-8000-000000000006'
+            WHEN 7 THEN '00000000-0000-7000-8000-000000000007'
+            WHEN 8 THEN '00000000-0000-7000-8000-000000000008'
+            WHEN 9 THEN '00000000-0000-7000-8000-000000000009'
+            WHEN 10 THEN '00000000-0000-7000-8000-000000000010'
+            WHEN 11 THEN '00000000-0000-7000-8000-000000000011'
+            WHEN 12 THEN '00000000-0000-7000-8000-000000000012'
+            WHEN 13 THEN '00000000-0000-7000-8000-000000000013'
+            WHEN 14 THEN '00000000-0000-7000-8000-000000000014'
+            WHEN 15 THEN '00000000-0000-7000-8000-000000000015'
+            WHEN 16 THEN '00000000-0000-7000-8000-000000000016'
+            WHEN 17 THEN '00000000-0000-7000-8000-000000000017'
+            WHEN 18 THEN '00000000-0000-7000-8000-000000000018'
+            ELSE '00000000-0000-7000-8000-000000000019'
+        END
+    END
+FROM launch_timeline;
+
+-- Generated medium timeline: APAC Developer Week reaches 50 timeline items.
+WITH RECURSIVE apac_timeline(n) AS (
+    SELECT 9
+    UNION ALL
+    SELECT n + 1 FROM apac_timeline WHERE n < 50
+)
+INSERT INTO planner_timeline_items (
+    id, event_id, title, item_type, starts_at, ends_at, status, owner,
+    notes, color, position, created_at, updated_at, depends_on_item_id, assigned_user_id
+)
+SELECT
+    printf('00000000-0000-7000-8000-000000004%03d', n),
+    '00000000-0000-7000-8000-000000000103',
+    CASE (n % 12)
+        WHEN 0 THEN 'Lab credential checkpoint '
+        WHEN 1 THEN 'Maintainer lounge coverage '
+        WHEN 2 THEN 'Workshop room reset '
+        WHEN 3 THEN 'Hallway track host block '
+        WHEN 4 THEN 'Mentor matching window '
+        WHEN 5 THEN 'Captioning support review '
+        WHEN 6 THEN 'Sponsor engineer rotation '
+        WHEN 7 THEN 'Community safety patrol '
+        WHEN 8 THEN 'Speaker demo support '
+        WHEN 9 THEN 'Student program desk '
+        WHEN 10 THEN 'Open-source clinic slot '
+        ELSE 'Developer recap asset '
+    END || printf('%03d', n),
+    CASE WHEN n % 13 = 0 THEN 'milestone' WHEN n % 4 = 0 THEN 'asset' ELSE 'task' END,
+    date('2026-07-20', '+' || (n % 16) || ' day') || printf('T%02d:00:00+08:00', 8 + (n % 8)),
+    CASE
+        WHEN n % 13 = 0 THEN date('2026-07-20', '+' || (n % 16) || ' day') || printf('T%02d:00:00+08:00', 8 + (n % 8))
+        ELSE date('2026-07-20', '+' || ((n % 16) + CASE WHEN n % 3 = 0 THEN 2 ELSE 0 END) || ' day') || 'T18:00:00+08:00'
+    END,
+    CASE WHEN n % 17 = 0 THEN 'done' WHEN n % 11 = 0 THEN 'blocked' WHEN n % 6 = 0 THEN 'in_progress' ELSE 'planned' END,
+    CASE WHEN n % 5 = 0 THEN 'Unassigned developer queue' ELSE
+        CASE (n % 12)
+            WHEN 0 THEN 'Lucas Brown'
+            WHEN 1 THEN 'Priya Nair'
+            WHEN 2 THEN 'Daniel Okafor'
+            WHEN 3 THEN 'Maya Chen'
+            WHEN 4 THEN 'Amina Hassan'
+            WHEN 5 THEN 'Kenji Tanaka'
+            WHEN 6 THEN 'Mateo Silva'
+            WHEN 7 THEN 'Wei Zhang'
+            WHEN 8 THEN 'Oliver Grant'
+            WHEN 9 THEN 'Sofia Marin'
+            WHEN 10 THEN 'Liam Connor'
+            ELSE 'Grace Kim'
+        END
+    END,
+    CASE (n % 6)
+        WHEN 0 THEN 'Generated medium workload item for developer conference staffing.'
+        WHEN 1 THEN 'Shows a healthy assignment spread across labs, lounges, mentors, and community support.'
+        WHEN 2 THEN 'Keeps the APAC event busy enough for workload demos without matching the flagship scale.'
+        WHEN 3 THEN 'Useful for Gantt rendering, status changes, and staff dashboard aggregation.'
+        WHEN 4 THEN 'Includes intentionally unassigned rows for staffing queue demonstrations.'
+        ELSE 'Represents practical developer-event execution across rooms, tracks, and support desks.'
+    END,
+    CASE (n % 8)
+        WHEN 0 THEN '#7C2D12'
+        WHEN 1 THEN '#0EA5E9'
+        WHEN 2 THEN '#14B8A6'
+        WHEN 3 THEN '#F97316'
+        WHEN 4 THEN '#6366F1'
+        WHEN 5 THEN '#DC2626'
+        WHEN 6 THEN '#64748B'
+        ELSE '#10B981'
+    END,
+    n,
+    '2026-04-30T09:30:00Z',
+    '2026-04-30T09:30:00Z',
+    CASE WHEN n > 9 AND n % 4 = 0 THEN printf('00000000-0000-7000-8000-000000004%03d', n - 1) ELSE '' END,
+    CASE WHEN n % 5 = 0 THEN '' ELSE
+        CASE (n % 12)
+            WHEN 0 THEN '00000000-0000-7000-8000-000000000014'
+            WHEN 1 THEN '00000000-0000-7000-8000-000000000003'
+            WHEN 2 THEN '00000000-0000-7000-8000-000000000004'
+            WHEN 3 THEN '00000000-0000-7000-8000-000000000001'
+            WHEN 4 THEN '00000000-0000-7000-8000-000000000007'
+            WHEN 5 THEN '00000000-0000-7000-8000-000000000010'
+            WHEN 6 THEN '00000000-0000-7000-8000-000000000012'
+            WHEN 7 THEN '00000000-0000-7000-8000-000000000018'
+            WHEN 8 THEN '00000000-0000-7000-8000-000000000002'
+            WHEN 9 THEN '00000000-0000-7000-8000-000000000005'
+            WHEN 10 THEN '00000000-0000-7000-8000-000000000006'
+            ELSE '00000000-0000-7000-8000-000000000011'
+        END
+    END
+FROM apac_timeline;
+
+-- Explicit unassigned workload on two additional events so about half the demo events show a staffing queue.
+INSERT INTO planner_timeline_items (
+    id, event_id, title, item_type, starts_at, ends_at, status, owner,
+    notes, color, position, created_at, updated_at, depends_on_item_id, assigned_user_id
+) VALUES
+    ('00000000-0000-7000-8000-000000005001', '00000000-0000-7000-8000-000000000102', 'Assign delegate help desk lead', 'task', '2026-09-07T10:00:00+01:00', '2026-09-07T15:00:00+01:00', 'planned', 'Unassigned climate queue', 'Needs one person to own late-arrival delegate questions and accessibility handoffs.', '#D97706', 9, '2026-04-30T09:40:00Z', '2026-04-30T09:40:00Z', '', ''),
+    ('00000000-0000-7000-8000-000000005002', '00000000-0000-7000-8000-000000000102', 'Find backup roundtable note taker', 'task', '2026-09-08T12:00:00+01:00', '2026-09-09T16:00:00+01:00', 'blocked', 'Unassigned climate queue', 'Pending privacy approval before assigning an observer to closed-door sessions.', '#DC2626', 10, '2026-04-30T09:40:00Z', '2026-04-30T09:40:00Z', '00000000-0000-7000-8000-000000000719', ''),
+    ('00000000-0000-7000-8000-000000005003', '00000000-0000-7000-8000-000000000107', 'Assign Americas watch-room backup', 'task', '2026-11-03T14:00:00Z', '2026-11-04T20:00:00Z', 'planned', 'Unassigned remote queue', 'Needs a backup host who can cover the Americas breakout and support queue.', '#4338CA', 7, '2026-04-30T09:45:00Z', '2026-04-30T09:45:00Z', '00000000-0000-7000-8000-000000000746', ''),
+    ('00000000-0000-7000-8000-000000005004', '00000000-0000-7000-8000-000000000107', 'Assign certificate review owner', 'asset', '2026-11-05T10:00:00Z', '2026-11-06T18:00:00Z', 'planned', 'Unassigned remote queue', 'Someone needs to verify attendance exports and certificate eligibility after the class.', '#F97316', 8, '2026-04-30T09:45:00Z', '2026-04-30T09:45:00Z', '', '');
 
 -- === social publishing queue ===
 INSERT INTO social_posts (id, event_id, platform, title, body, status, position, created_at, updated_at) VALUES
