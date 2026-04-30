@@ -449,6 +449,16 @@ impl EventService {
         self.validate_timeline_assignee(&event.id, req.assigned_user_id.as_deref())
             .await?;
 
+        let current = self
+            .repository
+            .find_planner_timeline_item(&event.id, item_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Planner timeline item not found".to_string()))?;
+
+        let starts_at = req.starts_at.as_deref().unwrap_or(&current.starts_at);
+        let ends_at = req.ends_at.as_deref().unwrap_or(&current.ends_at);
+        validate_timeline_dates(starts_at, ends_at)?;
+
         let item = self
             .repository
             .update_planner_timeline_item(&event.id, item_id, req)

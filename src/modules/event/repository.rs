@@ -483,6 +483,19 @@ impl EventRepository {
         Ok(())
     }
 
+    pub async fn find_planner_timeline_item(
+        &self,
+        event_id: &str,
+        item_id: &str,
+    ) -> Result<Option<planner_timeline_item_entity::Model>, AppError> {
+        PlannerTimelineItemEntity::find()
+            .filter(planner_timeline_item_entity::Column::EventId.eq(event_id))
+            .filter(planner_timeline_item_entity::Column::Id.eq(item_id))
+            .one(&self.db)
+            .await
+            .map_err(|_| AppError::InternalServerError)
+    }
+
     pub async fn list_planner_timeline_items(
         &self,
         event_id: &str,
