@@ -793,13 +793,13 @@ impl EventService {
     ) -> Result<(), AppError> {
         if req.platform.trim().is_empty() {
             return Err(AppError::BadRequest(
-                "Social post platform is requried".to_string(),
+                "Social post platform is required".to_string(),
             ));
         }
 
         if req.title.trim().is_empty() {
             return Err(AppError::BadRequest(
-                "Social post title is requried".to_string(),
+                "Social post title is required".to_string(),
             ));
         }
 
