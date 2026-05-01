@@ -68,6 +68,7 @@ impl EventService {
         req: CreateEventRequest,
         user_id: &str,
     ) -> Result<Event, AppError> {
+        let req = normalize_create_event_request(req);
         self.validate_create_request(&req)?;
 
         let (event, role) = self.repository.create(req, user_id).await?;
@@ -922,6 +923,21 @@ fn is_valid_slug(value: &str) -> bool {
         && value
             .chars()
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+}
+
+fn normalize_create_event_request(req: CreateEventRequest) -> CreateEventRequest {
+    CreateEventRequest {
+        name: req.name.trim().to_string(),
+        slug: req.slug.trim().to_string(),
+        description: req
+            .description
+            .map(|description| description.trim().to_string())
+            .filter(|description| !description.is_empty()),
+        venue: req.venue.trim().to_string(),
+        timezone: req.timezone.trim().to_string(),
+        starts_at: req.starts_at.trim().to_string(),
+        ends_at: req.ends_at.trim().to_string(),
+    }
 }
 
 fn is_valid_hex_color(value: &str) -> bool {

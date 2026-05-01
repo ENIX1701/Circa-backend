@@ -1,5 +1,5 @@
 use actix_files::{Files, NamedFile};
-use actix_web::{App, HttpServer, web};
+use actix_web::{App, HttpResponse, HttpServer, web};
 use circa_backend::auth;
 use circa_backend::auth::delivery::build_magic_link_delivery;
 use circa_backend::config::{AppEnvironment, Config};
@@ -12,6 +12,12 @@ use circa_backend::user::{repository::UserRepository, service::UserService};
 
 async fn spa_index() -> actix_web::Result<NamedFile> {
     Ok(NamedFile::open("./public/index.html")?)
+}
+
+async fn api_not_found() -> HttpResponse {
+    HttpResponse::NotFound().json(serde_json::json!({
+        "error": "API endpoint not found"
+    }))
 }
 
 #[actix_web::main]
@@ -72,7 +78,8 @@ async fn main() -> std::io::Result<()> {
                 web::scope("/api")
                     .configure(user::routes::config)
                     .configure(auth::routes::config)
-                    .configure(event::routes::config),
+                    .configure(event::routes::config)
+                    .default_service(web::route().to(api_not_found)),
             )
             .configure(|cfg| {
                 if serve_static_frontend {

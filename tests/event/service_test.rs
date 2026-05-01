@@ -49,6 +49,36 @@ async fn create_event_validates_input_and_creates_owner_membership() {
     assert_eq!(event.current_user_role, EventMembershipRole::Owner);
     assert_eq!(event.created_by_user_id, "owner-1");
 
+    let normalized = service
+        .create_event(
+            {
+                let mut req = valid_event_request("  normalized-slug  ");
+                req.name = "  Normalized event  ".to_string();
+                req.description = Some("  Trimmed description  ".to_string());
+                req.venue = "  Main Hall  ".to_string();
+                req.timezone = "  Europe/Warsaw  ".to_string();
+                req.starts_at = "  2026-06-01T10:00:00Z  ".to_string();
+                req.ends_at = "  2026-06-02T10:00:00Z  ".to_string();
+                req
+            },
+            "owner-1",
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(normalized.name, "Normalized event");
+    assert_eq!(normalized.slug, "normalized-slug");
+    assert_eq!(normalized.description, "Trimmed description");
+    assert_eq!(normalized.venue, "Main Hall");
+    assert_eq!(normalized.timezone, "Europe/Warsaw");
+    assert!(
+        !service
+            .is_slug_available(" normalized-slug ")
+            .await
+            .unwrap()
+    );
+    assert!(service.is_slug_available("available-slug").await.unwrap());
+
     for (req, message) in [
         (
             {
